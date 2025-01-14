@@ -1,0 +1,42 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.feather'
+version = '1.0-SNAPSHOT'
+
+sourceCompatibility = '17'
+targetCompatibility = '17'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
+
+    // 필요한 다른 의존성들 추가
+}
+
+test {
+    useJUnitPlatform()
+}
+
+application {
+    mainClass = 'Main' // 메인 클래스 경로 지정
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+        }
+    }
+    test {
+        java {
+            // 현재 테스트 파일의 실제 위치를 지정
+            srcDirs = ['test']  // 실제 위치에 맞게 수정
+        }
+    }
+}

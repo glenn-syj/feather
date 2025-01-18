@@ -2,9 +2,8 @@ package storage.file;
 
 import storage.exception.InvalidHeaderException;
 
-import java.io.EOFException;
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.io.*;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 
 /**
@@ -29,56 +28,56 @@ public final class FeatherFileHeader {
     private final long timestamp;
 
     public FeatherFileHeader(FileType fileType, int recordCount) {
+        if (fileType == null) {
+            throw new IllegalArgumentException("FileType cannot be null");
+        }
+        if (recordCount < 0) {
+            throw new IllegalArgumentException("Record count cannot be negative");
+        }
         this.fileType = fileType;
         this.recordCount = recordCount;
         this.timestamp = System.currentTimeMillis();
     }
 
-    public ByteBuffer write() {
-        ByteBuffer buffer = ByteBuffer.allocate(HEADER_SIZE);
-        buffer.putInt(MAGIC_NUMBER)
-                .putInt(VERSION)
-                .put(fileType.getCode())
-                .putInt(recordCount)
-                .putLong(timestamp)
-                .putInt(HEADER_SIZE);
-        buffer.flip();
-        return buffer;
+    public void writeTo(DataOutput out) throws IOException {
+        out.writeInt(MAGIC_NUMBER);
+        out.writeInt(VERSION);
+        out.writeByte(fileType.getCode());
+        out.writeInt(recordCount);
+        out.writeLong(timestamp);
+        out.writeInt(HEADER_SIZE);
     }
 
     public void writeTo(FileChannel channel) throws IOException {
-        ByteBuffer buffer = write();
-        while (buffer.hasRemaining()) {
-            channel.write(buffer);
-        }
+        DataOutputStream dos = new DataOutputStream(
+                Channels.newOutputStream(channel));
+        writeTo(dos);
+        dos.flush();
     }
 
-    public static FeatherFileHeader read(ByteBuffer buffer) {
-        if (buffer.remaining() < HEADER_SIZE) {
-            throw new InvalidHeaderException("Buffer too small for header");
-        }
-
-        int magic = buffer.getInt();
+    public static FeatherFileHeader readFrom(DataInput in) throws IOException {
+        int magic = in.readInt();
         if (magic != MAGIC_NUMBER) {
-            throw new InvalidHeaderException("Invalid magic number: " +
-                    String.format("0x%08X", magic));
+            throw new InvalidHeaderException(
+                    String.format("Invalid magic number: 0x%08X", magic));
         }
 
-        int version = buffer.getInt();
+        int version = in.readInt();
         if (version != VERSION) {
-            throw new InvalidHeaderException("Unsupported version: " +
-                    String.format("0x%08X", version));
+            throw new InvalidHeaderException(
+                    String.format("Unsupported version: 0x%08X", version));
         }
 
-        byte typeCode = buffer.get();
+        byte typeCode = in.readByte();
         FileType fileType = FileType.fromCode(typeCode);
 
-        int recordCount = buffer.getInt();
-        long timestamp = buffer.getLong();
-        int headerSize = buffer.getInt();
+        int recordCount = in.readInt();
+        long timestamp = in.readLong();
+        int headerSize = in.readInt();
 
         if (headerSize != HEADER_SIZE) {
-            throw new InvalidHeaderException("Invalid header size: " + headerSize);
+            throw new InvalidHeaderException(
+                    "Invalid header size: " + headerSize);
         }
 
         return new FeatherFileHeader(fileType, recordCount);
@@ -86,14 +85,14 @@ public final class FeatherFileHeader {
 
     public static FeatherFileHeader readFrom(FileChannel channel)
             throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(HEADER_SIZE);
-        while (buffer.hasRemaining()) {
-            if (channel.read(buffer) == -1) {
-                throw new EOFException("Reached end of file while reading header");
-            }
+        DataInputStream dis = new DataInputStream(
+                Channels.newInputStream(channel));
+
+        try {
+            return readFrom(dis);
+        } catch (EOFException e) {
+            throw new EOFException("Reached end of file while reading header");
         }
-        buffer.flip();
-        return read(buffer);
     }
 
     public FileType getFileType() { return fileType; }

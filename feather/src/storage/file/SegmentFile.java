@@ -16,6 +16,9 @@ public abstract class SegmentFile implements Closeable {
     protected final ByteBuffer buffer;
     protected long position;
 
+    /*
+        TODO: get the buffer size from Lucene-like IOContext class when created
+     */
     protected SegmentFile(FileChannel channel, int bufferSize)
             throws IOException {
         this.channel = channel;
@@ -34,6 +37,8 @@ public abstract class SegmentFile implements Closeable {
         channel.position(0);
         return FeatherFileHeader.readFrom(channel);
     }
+
+    // TODO: write a method ensuring status to be opened
 
     protected void validateFileType() throws IOException {
         FileType expected = getFileType();

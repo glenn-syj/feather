@@ -99,6 +99,14 @@ public abstract class SegmentFile implements Closeable {
         return position;
     }
 
+    public FileType getHeaderFileType() {
+        return header.getFileType();
+    }
+
+    public int getHeaderRecordCount() {
+        return header.getRecordCount();
+    }
+
     // TODO: need a protected method for segment merge
 
     @Override

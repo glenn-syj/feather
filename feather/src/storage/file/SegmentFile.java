@@ -99,17 +99,6 @@ public abstract class SegmentFile implements Closeable {
         return position;
     }
 
-    protected void updateRecordCount(int newCount) throws IOException {
-        long savedPosition = position;
-
-        // move to recordCounter field
-        // (magic + version + fileType = 9 bytes)
-        seek(9);
-        writeInt(newCount);
-
-        seek(savedPosition);
-    }
-
     // TODO: need a protected method for segment merge
 
     @Override

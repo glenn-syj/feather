@@ -67,6 +67,9 @@ class DocumentFileTest {
         assertArrayEquals(new byte[]{1, 2, 3, 4}, (byte[]) readDoc.getField("data"));
     }
 
+    /*
+        FIXME: `Unknown field type 0` occurs in the DocumentFile.readFieldValue()
+     */
     @Test
     void writeAndReadMultipleDocuments() throws IOException {
         // Given
@@ -154,6 +157,9 @@ class DocumentFileTest {
         assertEquals(expectedSize, documentFile.size());
     }
 
+    /*
+        FIXME: `Unknown field type 0` occurs in the DocumentFile.readFieldValue()
+     */
     @Test
     void verifyDocumentsAfterFlush() throws IOException {
         // Given

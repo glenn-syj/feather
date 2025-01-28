@@ -47,6 +47,10 @@ public class DocumentFile extends SegmentFile {
         return deserializeDocument(id, content);
     }
 
+    public void seekToContent() throws IOException {
+        seek(FeatherFileHeader.HEADER_SIZE);
+    }
+
     private void validateDocument(Document document) {
         if (document == null || document.getId() < 0) {
             throw new IllegalArgumentException("Invalid document");

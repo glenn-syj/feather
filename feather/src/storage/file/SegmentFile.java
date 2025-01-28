@@ -28,6 +28,28 @@ public abstract class SegmentFile implements Closeable {
         validateFileType();
     }
 
+    protected SegmentFile(FileChannel channel, int bufferSize, FeatherFileHeader header)
+            throws IOException {
+        this.channel = channel;
+        this.buffer = ByteBuffer.allocate(bufferSize);
+
+        if (header != null) {
+            this.header = header;
+            header.writeTo(channel);
+        } else if (channel.size() == 0) {
+            this.header = new FeatherFileHeader(
+                    getFileType(),
+                    0
+            );
+            this.header.writeTo(channel);
+        } else {
+            this.header = readHeader();
+        }
+
+        this.position = FeatherFileHeader.HEADER_SIZE;
+        validateFileType();
+    }
+
     private FeatherFileHeader readHeader() throws IOException {
         if (channel.size() < FeatherFileHeader.HEADER_SIZE) {
             throw new InvalidHeaderException(
@@ -53,7 +75,7 @@ public abstract class SegmentFile implements Closeable {
 
     protected abstract FileType getFileType();
 
-    protected void flush() throws IOException {
+    public void flush() throws IOException {
         channel.force(false);
     }
 

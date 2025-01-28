@@ -21,6 +21,10 @@ public class DocumentFile extends SegmentFile {
         super(channel, bufferSize);
     }
 
+    public DocumentFile(FileChannel channel, int bufferSize, FeatherFileHeader header) throws IOException {
+        super(channel, bufferSize, header);
+    }
+
     @Override
     protected FileType getFileType() {
         return FileType.DOC;

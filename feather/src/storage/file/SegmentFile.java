@@ -124,8 +124,10 @@ public abstract class SegmentFile implements Closeable {
     }
 
     protected void writeBytes(ByteBuffer data) throws IOException {
+        data.position(0);
+        int length = data.remaining();
         channel.write(data, position);
-        position += data.remaining();
+        position += length;
     }
 
     protected void seek(long newPosition) throws IOException {

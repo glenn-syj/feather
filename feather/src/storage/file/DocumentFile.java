@@ -32,7 +32,7 @@ public class DocumentFile extends SegmentFile {
 
     public void writeDocument(Document document) throws IOException {
         validateDocument(document);
-
+        channel.position(channel.size());
         writeInt(document.getId());
         ByteBuffer content = serializeDocument(document);
         writeInt(content.remaining());
@@ -71,7 +71,7 @@ public class DocumentFile extends SegmentFile {
         return buffer;
     }
 
-    private void writeField(ByteBuffer buffer, String name, Object value) {
+    private void writeField(ByteBuffer buffer, String name, Object value) throws IOException {
         byte[] nameBytes = name.getBytes(CHARSET);
         buffer.putShort((short) nameBytes.length);
         buffer.put(nameBytes);
@@ -88,7 +88,10 @@ public class DocumentFile extends SegmentFile {
             buffer.put(TYPE_BINARY);
             buffer.putInt(bytes.length);
             buffer.put(bytes);
+        } else {
+            throw new IllegalArgumentException("this type of value cannot be documented");
         }
+
     }
 
     private Document deserializeDocument(int id, ByteBuffer buffer) {
@@ -112,7 +115,6 @@ public class DocumentFile extends SegmentFile {
 
         byte type = buffer.get();
         Object value = readFieldValue(buffer, type);
-
         document.addField(name, value);
     }
 

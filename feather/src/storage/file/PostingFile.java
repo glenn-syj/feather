@@ -103,6 +103,16 @@ public class PostingFile extends SegmentFile {
         return postings;
     }
 
+    public void seekToPostingList(long position) throws IOException {
+        if (position < FeatherFileHeader.HEADER_SIZE) {
+            throw new IllegalArgumentException(
+                    "Invalid position: " + position +
+                            ". Position must be >= " + FeatherFileHeader.HEADER_SIZE);
+        }
+
+        seek(position);
+    }
+
     public long getCurrentPosition() throws IOException {
         return channel.position();
     }

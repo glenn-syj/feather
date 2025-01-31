@@ -37,7 +37,7 @@ public class Posting implements Comparable<Posting> {
 
     public int getDocumentId() { return documentId; }
     public int getFrequency() { return frequency; }
-    public int[] getPositions() { return positions.clone(); }  // 방어적 복사
+    public int[] getPositions() { return positions.clone(); }
 
     @Override
     public boolean equals(Object o) {

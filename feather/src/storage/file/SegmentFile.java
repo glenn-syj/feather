@@ -135,6 +135,10 @@ public abstract class SegmentFile implements Closeable {
         buffer.clear();
     }
 
+    public void seekToContent() throws IOException {
+        seek(FeatherFileHeader.HEADER_SIZE);
+    }
+
     public long getPosition() {
         return position;
     }

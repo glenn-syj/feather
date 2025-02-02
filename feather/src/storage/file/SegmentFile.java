@@ -115,6 +115,22 @@ public abstract class SegmentFile implements Closeable {
         return buffer.getLong();
     }
 
+    protected short readShort() throws IOException {
+        buffer.clear().limit(2);
+        channel.read(buffer, position);
+        buffer.flip();
+        position += 2;
+        return buffer.getShort();
+    }
+
+    protected void writeShort(short value) throws IOException {
+        buffer.clear();
+        buffer.putShort(value);
+        buffer.flip();
+        channel.write(buffer, position);
+        position += 2;
+    }
+
     protected ByteBuffer readBytes(int length) throws IOException {
         ByteBuffer data = ByteBuffer.allocate(length);
         channel.read(data, position);

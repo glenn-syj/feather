@@ -28,16 +28,15 @@ public class DictionaryFile extends SegmentFile {
     }
 
     public void writeTermRecord(Term term, long postingPosition) throws IOException {
-
         seek(termRecordsPosition);
         long recordPosition = termRecordsPosition;
 
         byte[] fieldBytes = term.getField().getBytes(StandardCharsets.UTF_8);
-        writeInt(fieldBytes.length);
+        writeShort((short) fieldBytes.length);
         writeBytes(ByteBuffer.wrap(fieldBytes));
 
         byte[] textBytes = term.getText().getBytes(StandardCharsets.UTF_8);
-        writeInt(textBytes.length);
+        writeShort((short) textBytes.length);
         writeBytes(ByteBuffer.wrap(textBytes));
 
         writeInt(term.getDocumentFrequency());
@@ -51,8 +50,6 @@ public class DictionaryFile extends SegmentFile {
 
         termIndexPosition = termRecordsPosition;
         seek(termIndexPosition);
-
-        writeInt(termPositions.size());
 
         for (Map.Entry<Term, Long> entry : termPositions.entrySet()) {
             Term term = entry.getKey();
@@ -93,12 +90,18 @@ public class DictionaryFile extends SegmentFile {
 
     private void writeTermIndexEntry(Term term, long recordPosition) throws IOException {
         byte[] fieldBytes = term.getField().getBytes(StandardCharsets.UTF_8);
-        writeInt(fieldBytes.length);
+        if (fieldBytes.length > Short.MAX_VALUE) {
+            throw new IllegalArgumentException("Field name too long: " + term.getField());
+        }
+        writeShort((short) fieldBytes.length);
         writeBytes(ByteBuffer.wrap(fieldBytes));
 
         String prefix = getPrefixString(term.getText());
         byte[] prefixBytes = prefix.getBytes(StandardCharsets.UTF_8);
-        writeInt(prefixBytes.length);
+        if (prefixBytes.length > Short.MAX_VALUE) {
+            throw new IllegalArgumentException("Prefix too long: " + prefix);
+        }
+        writeShort((short) prefixBytes.length);
         writeBytes(ByteBuffer.wrap(prefixBytes));
 
         writeLong(recordPosition);
@@ -110,10 +113,10 @@ public class DictionaryFile extends SegmentFile {
 
     private TermIndexEntry readTermIndexEntry() throws IOException {
 
-        int fieldLength = readInt();
+        short fieldLength = readShort();
         String field = StandardCharsets.UTF_8.decode(readBytes(fieldLength)).toString();
 
-        int prefixLength = readInt();
+        short prefixLength = readShort();
         String prefix = StandardCharsets.UTF_8.decode(readBytes(prefixLength)).toString();
 
         long recordPosition = readLong();
@@ -126,10 +129,10 @@ public class DictionaryFile extends SegmentFile {
     }
 
     private Term readTermRecord() throws IOException {
-        int fieldLength = readInt();
+        short fieldLength = readShort();
         String field = StandardCharsets.UTF_8.decode(readBytes(fieldLength)).toString();
 
-        int textLength = readInt();
+        short textLength = readShort();
         String text = StandardCharsets.UTF_8.decode(readBytes(textLength)).toString();
 
         int docFreq = readInt();

@@ -11,6 +11,7 @@ import java.util.*;
     TODO: add a exact keyword match feature
  */
 public class DictionaryFile extends SegmentFile {
+    private static final int INDEX_BLOCK_SIZE = 128;
     private static final int PREFIX_LENGTH = 8;
     private long termIndexPosition;
     private long termRecordsPosition;
@@ -47,17 +48,21 @@ public class DictionaryFile extends SegmentFile {
     }
 
     public void writeTermIndex() throws IOException {
-
         termIndexPosition = termRecordsPosition;
         seek(termIndexPosition);
 
-        for (Map.Entry<Term, Long> entry : termPositions.entrySet()) {
-            Term term = entry.getKey();
-            long recordPosition = entry.getValue();
-            writeTermIndexEntry(term, recordPosition);
+        List<Map.Entry<Term, Long>> entries = new ArrayList<>(termPositions.entrySet());
+
+        for (int i = 0; i < entries.size(); i += INDEX_BLOCK_SIZE) {
+            // only write the first term in the block
+            Map.Entry<Term, Long> blockEntry = entries.get(i);
+            writeTermIndexEntry(blockEntry.getKey(), blockEntry.getValue());
         }
     }
 
+    /*
+        TODO: modify the search logic based on the block-sized index
+     */
     public Term findTerm(String field, String text) throws IOException {
         seek(termIndexPosition);
         int entryCount = readInt();

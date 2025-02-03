@@ -146,6 +146,27 @@ public class DictionaryFile extends SegmentFile {
         return new Term(field, text, docFreq, postingPosition);
     }
 
+    private Term scanBlock(String field, String text) throws IOException {
+        long startPosition = position;
+        int termsScanned = 0;
+
+        while (termsScanned < INDEX_BLOCK_SIZE && position < size()) {
+            Term term = readTermRecord();
+            int cmp = compareTerms(field, text, term);
+
+            if (cmp == 0) {
+                return term;
+            }
+            if (cmp < 0) {
+                return null;
+            }
+
+            termsScanned++;
+        }
+
+        return null;
+    }
+
     private int compareTerms(String field, String text, TermIndexEntry indexEntry) {
         int cmp = field.compareTo(indexEntry.field);
         if (cmp != 0) return cmp;
@@ -153,6 +174,15 @@ public class DictionaryFile extends SegmentFile {
         String prefix = getPrefixString(text);
         return prefix.compareTo(indexEntry.text);
     }
+
+    private int compareTerms(String field, String text, Term term) {
+        int cmp = field.compareTo(term.getField());
+        if (cmp != 0) return cmp;
+
+        String prefix = getPrefixString(text);
+        return prefix.compareTo(getPrefixString(term.getText()));
+    }
+
 
     private static class TermIndexEntry {
         String field;

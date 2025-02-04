@@ -18,6 +18,9 @@ public class DictionaryFile extends SegmentFile {
     private long blockDataPosition;
     private final Map<Term, Long> termPositions;
 
+    private int blockCount;
+    private long[] blockOffsets;
+
     public DictionaryFile(FileChannel channel, int bufferSize, FeatherFileHeader header) throws IOException {
         super(channel, bufferSize, header);
         this.termRecordsPosition = FeatherFileHeader.HEADER_SIZE;
@@ -135,22 +138,14 @@ public class DictionaryFile extends SegmentFile {
         return text.length() <= PREFIX_LENGTH ? text : text.substring(0, PREFIX_LENGTH);
     }
 
-    private TermIndexInfo readTermIndex() throws IOException {
+    private void readTermIndex() throws IOException {
         seek(termIndexPosition);
 
-        int blockCount = readInt();
-        long[] blockOffsets = new long[blockCount];
+        blockCount = readInt();
+        blockOffsets = new long[blockCount];
         for (int i = 0; i < blockCount; i++) {
             blockOffsets[i] = readLong();
         }
-
-        blockDataPosition = position;
-
-        TermIndexInfo indexInfo = new TermIndexInfo();
-        indexInfo.blockCount = blockCount;
-        indexInfo.blockOffsets = blockOffsets;
-
-        return indexInfo;
     }
 
 
@@ -225,10 +220,5 @@ public class DictionaryFile extends SegmentFile {
         String field;
         String text;
         long recordPosition;
-    }
-
-    private static class TermIndexInfo {
-        int blockCount;
-        long[] blockOffsets;
     }
 }

@@ -53,11 +53,29 @@ public class DictionaryFile extends SegmentFile {
 
         List<Map.Entry<Term, Long>> entries = new ArrayList<>(termPositions.entrySet());
 
+        int blockCount = (entries.size() + INDEX_BLOCK_SIZE - 1) / INDEX_BLOCK_SIZE;
+        writeInt(blockCount);
+
+        long blockOffsetsPosition = position;
+        for (int i = 0; i < blockCount; i++) {
+            writeLong(0L); // assign temporary value
+        }
+
+        long[] blockOffsets = new long[blockCount];
+        int blockIndex = 0;
+
         for (int i = 0; i < entries.size(); i += INDEX_BLOCK_SIZE) {
-            // only write the first term in the block
             Map.Entry<Term, Long> blockEntry = entries.get(i);
+            blockOffsets[blockIndex++] = position - termIndexPosition;
             writeTermIndexEntry(blockEntry.getKey(), blockEntry.getValue());
         }
+
+        long endPosition = position;
+        seek(blockOffsetsPosition);
+        for (long offset : blockOffsets) {
+            writeLong(offset);
+        }
+        seek(endPosition);
     }
 
     /*

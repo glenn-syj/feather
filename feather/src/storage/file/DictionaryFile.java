@@ -134,6 +134,24 @@ public class DictionaryFile extends SegmentFile {
         return text.length() <= PREFIX_LENGTH ? text : text.substring(0, PREFIX_LENGTH);
     }
 
+    private TermIndexInfo readTermIndex() throws IOException {
+        seek(termIndexPosition);
+
+        int blockCount = readInt();
+        long[] blockOffsets = new long[blockCount];
+        for (int i = 0; i < blockCount; i++) {
+            blockOffsets[i] = readLong();
+        }
+
+        TermIndexInfo indexInfo = new TermIndexInfo();
+        indexInfo.blockCount = blockCount;
+        indexInfo.blockOffsets = blockOffsets;
+        indexInfo.blockDataPosition = position;
+
+        return indexInfo;
+    }
+
+
     private TermIndexEntry readTermIndexEntry() throws IOException {
 
         short fieldLength = readShort();
@@ -201,10 +219,15 @@ public class DictionaryFile extends SegmentFile {
         return prefix.compareTo(getPrefixString(term.getText()));
     }
 
-
     private static class TermIndexEntry {
         String field;
         String text;
         long recordPosition;
+    }
+
+    private static class TermIndexInfo {
+        int blockCount;
+        long[] blockOffsets;
+        long blockDataPosition;
     }
 }

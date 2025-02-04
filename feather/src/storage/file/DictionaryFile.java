@@ -82,33 +82,36 @@ public class DictionaryFile extends SegmentFile {
         seek(endPosition);
     }
 
-    /*
-        TODO: modify the search logic based on the block-sized index
-     */
     public Term findTerm(String field, String text) throws IOException {
-        seek(termIndexPosition);
-        int entryCount = readInt();
-
         int low = 0;
-        int high = entryCount - 1;
+        int high = blockCount - 1;
 
+        TermIndexEntry currentEntry, nextEntry;
         while (low <= high) {
             int mid = (low + high) >>> 1;
 
-            seek(termIndexPosition + 4 + (mid * 8L));
-            long entryPosition = readLong();
+            seek(termIndexPosition + blockOffsets[mid]);
+            currentEntry = readTermIndexEntry();
 
-            seek(entryPosition);
-            TermIndexEntry indexEntry = readTermIndexEntry();
+            nextEntry = null;
+            if (mid < blockCount - 1) {
+                seek(termIndexPosition + blockOffsets[mid + 1]);
+                nextEntry = readTermIndexEntry();
+            }
 
-            int cmp = compareTerms(field, text, indexEntry);
+            int cmp = compareTerms(field, text, currentEntry);
             if (cmp < 0) {
+                if (mid == 0) {
+                    return null;
+                }
                 high = mid - 1;
-            } else if (cmp > 0) {
-                low = mid + 1;
             } else {
-                seek(indexEntry.recordPosition);
-                return readTermRecord();
+                if (nextEntry != null && compareTerms(field, text, nextEntry) < 0) {
+                    return scanBlock(field, text, mid);
+                } else if (nextEntry == null) {
+                    return scanBlock(field, text, mid);
+                }
+                low = mid + 1;
             }
         }
 

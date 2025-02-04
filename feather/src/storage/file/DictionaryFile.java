@@ -146,6 +146,7 @@ public class DictionaryFile extends SegmentFile {
         for (int i = 0; i < blockCount; i++) {
             blockOffsets[i] = readLong();
         }
+        blockDataPosition = position;
     }
 
 
@@ -179,8 +180,8 @@ public class DictionaryFile extends SegmentFile {
         return new Term(field, text, docFreq, postingPosition);
     }
 
-    private Term scanBlock(String field, String text) throws IOException {
-        long startPosition = position;
+    private Term scanBlock(String field, String text, int blockIndex) throws IOException {
+        seek(termIndexPosition + blockOffsets[blockIndex]);
         int termsScanned = 0;
 
         while (termsScanned < INDEX_BLOCK_SIZE && position < size()) {

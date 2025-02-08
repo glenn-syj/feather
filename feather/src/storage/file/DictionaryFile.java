@@ -33,8 +33,7 @@ public class DictionaryFile extends SegmentFile {
     }
 
     public void writeTermRecord(Term term, long postingPosition) throws IOException {
-        seek(termRecordsPosition);
-        long recordPosition = termRecordsPosition;
+        long recordPosition = Math.max(position, termRecordsPosition);
 
         byte[] fieldBytes = term.getField().getBytes(StandardCharsets.UTF_8);
         writeShort((short) fieldBytes.length);
@@ -47,7 +46,6 @@ public class DictionaryFile extends SegmentFile {
         writeInt(term.getDocumentFrequency());
         writeLong(postingPosition);
 
-        termRecordsPosition = getPosition();
         termPositions.put(term, recordPosition);
     }
 
@@ -93,22 +91,18 @@ public class DictionaryFile extends SegmentFile {
             seek(termIndexPosition + blockOffsets[mid]);
             currentEntry = readTermIndexEntry();
 
-            nextEntry = null;
-            if (mid < blockCount - 1) {
-                seek(termIndexPosition + blockOffsets[mid + 1]);
-                nextEntry = readTermIndexEntry();
-            }
-
             int cmp = compareTerms(field, text, currentEntry);
             if (cmp < 0) {
-                if (mid == 0) {
-                    return null;
-                }
                 high = mid - 1;
             } else {
-                if (nextEntry != null && compareTerms(field, text, nextEntry) < 0) {
+                if (mid == blockCount - 1) {
                     return scanBlock(field, text, mid);
-                } else if (nextEntry == null) {
+                }
+
+                seek(termIndexPosition + blockOffsets[mid + 1]);
+                nextEntry = readTermIndexEntry();
+
+                if (compareTerms(field, text, nextEntry) < 0) {
                     return scanBlock(field, text, mid);
                 }
                 low = mid + 1;

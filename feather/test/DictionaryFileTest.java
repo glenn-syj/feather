@@ -9,6 +9,7 @@ import storage.file.Term;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
@@ -28,6 +29,8 @@ public class DictionaryFileTest {
     @BeforeEach
     void setUp() throws IOException {
         filePath = tempDir.resolve("test.dic");
+        Files.deleteIfExists(filePath);
+
         channel = FileChannel.open(filePath,
                 StandardOpenOption.CREATE,
                 StandardOpenOption.READ,

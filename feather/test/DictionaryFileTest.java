@@ -55,8 +55,7 @@ public class DictionaryFileTest {
         Term term = new Term("title", "apple", 1, 1000L);
 
         // When
-        dictionaryFile.writeTermRecord(term);
-        dictionaryFile.writeTermIndex();
+        dictionaryFile.addTermRecord(term);
         dictionaryFile.flush();
 
         // Then
@@ -80,9 +79,9 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.writeTermRecord(term);
+            dictionaryFile.addTermRecord(term);
         }
-        dictionaryFile.writeTermIndex();
+        dictionaryFile.flush();
 
         // Then
         Term found1 = dictionaryFile.findTerm("title", "banana");
@@ -106,9 +105,9 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.writeTermRecord(term);
+            dictionaryFile.addTermRecord(term);
         }
-        dictionaryFile.writeTermIndex();
+        dictionaryFile.flush();
 
         // Then
         // Term in first block
@@ -126,8 +125,7 @@ public class DictionaryFileTest {
     void findNonExistentTerm() throws IOException {
         // Given
         Term term = new Term("title", "apple", 1, 1000L);
-        dictionaryFile.writeTermRecord(term);
-        dictionaryFile.writeTermIndex();
+        dictionaryFile.addTermRecord(term);
         dictionaryFile.flush();
 
         // When & Then
@@ -142,8 +140,8 @@ public class DictionaryFileTest {
         Term term = new Term("title", longText, 1, 1000L);
 
         // When
-        dictionaryFile.writeTermRecord(term);
-        dictionaryFile.writeTermIndex();
+        dictionaryFile.addTermRecord(term);
+        dictionaryFile.flush();
 
         // Then
         Term found = dictionaryFile.findTerm("title", longText);
@@ -161,9 +159,9 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.writeTermRecord(term);
+            dictionaryFile.addTermRecord(term);
         }
-        dictionaryFile.writeTermIndex();
+        dictionaryFile.flush();
 
         // Then
         // Search terms near block boundaries
@@ -189,9 +187,9 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.writeTermRecord(term);
+            dictionaryFile.addTermRecord(term);
         }
-        dictionaryFile.writeTermIndex();
+        dictionaryFile.flush();
 
         // Then
         Term found = dictionaryFile.findTerm("title", "\uBC14\uB098\uB098");

@@ -17,6 +17,7 @@ public class DictionaryFile extends SegmentFile {
     private long termRecordsPosition;
     private long blockDataPosition;
     private final Map<Term, Long> termPositions;
+    private final List<Term> termsCache;
 
     private int blockCount;
     private long[] blockOffsets;
@@ -25,6 +26,7 @@ public class DictionaryFile extends SegmentFile {
         super(channel, bufferSize, header);
         this.termRecordsPosition = FeatherFileHeader.HEADER_SIZE;
         this.termPositions = new TreeMap<>(); // TreeMap to maintain the order of keys
+        this.termsCache = new ArrayList<>();
     }
 
     @Override
@@ -32,7 +34,23 @@ public class DictionaryFile extends SegmentFile {
         return FileType.DIC;
     }
 
-    public void writeTermRecord(Term term) throws IOException {
+    @Override
+    public void flush() throws IOException {
+
+        Collections.sort(termsCache);
+        writeTermRecords();
+        writeTermIndex();
+        super.flush();
+
+        // Clear memory as terms are now on disk and segment becomes immutable
+        termsCache.clear();
+    }
+
+    public void addTermRecord(Term term) {
+        termsCache.add(term);
+    }
+
+    private void writeTermRecord(Term term) throws IOException {
         long recordPosition = termRecordsPosition;
 
         byte[] fieldBytes = term.getField().getBytes(StandardCharsets.UTF_8);
@@ -50,7 +68,20 @@ public class DictionaryFile extends SegmentFile {
         termRecordsPosition = position;
     }
 
-    public void writeTermIndex() throws IOException {
+    /*
+        As it directly writes terms on the disk, it should be called once in a file.
+     */
+    private void writeTermRecords() throws IOException {
+        seek(FeatherFileHeader.HEADER_SIZE);
+        termRecordsPosition = position;
+        termPositions.clear();
+
+        for (Term term : termsCache) {
+            writeTermRecord(term);
+        }
+    }
+
+    private void writeTermIndex() throws IOException {
         System.out.println("Starting writeTermIndex");
         termIndexPosition = termRecordsPosition;
         System.out.println("termIndexPosition: " + termIndexPosition);
@@ -92,43 +123,7 @@ public class DictionaryFile extends SegmentFile {
         System.out.println("Final position: " + position);
     }
 
-    public Term findTerm(String field, String text) throws IOException {
-        int low = 0;
-        int high = blockCount - 1;
-
-        TermIndexEntry currentEntry, nextEntry;
-        while (low <= high) {
-            int mid = (low + high) >>> 1;
-
-            seek(termIndexPosition + blockOffsets[mid]);
-            currentEntry = readTermIndexEntry();
-
-            int cmp = compareTerms(field, text, currentEntry);
-            if (cmp < 0) {
-                high = mid - 1;
-            } else {
-                if (mid == blockCount - 1) {
-                    return scanBlock(field, text, mid);
-                }
-
-                seek(termIndexPosition + blockOffsets[mid + 1]);
-                nextEntry = readTermIndexEntry();
-
-                if (compareTerms(field, text, nextEntry) < 0) {
-                    return scanBlock(field, text, mid);
-                }
-                low = mid + 1;
-            }
-        }
-
-        return null;
-    }
-
 //    public Term findTerm(String field, String text) throws IOException {
-//        System.out.println("Finding term: field=" + field + ", text=" + text);
-//        System.out.println("blockCount: " + blockCount);
-//        System.out.println("termIndexPosition: " + termIndexPosition);
-//
 //        int low = 0;
 //        int high = blockCount - 1;
 //
@@ -137,16 +132,13 @@ public class DictionaryFile extends SegmentFile {
 //            int mid = (low + high) >>> 1;
 //
 //            seek(termIndexPosition + blockOffsets[mid]);
-//            System.out.println(Arrays.toString(blockOffsets));
 //            currentEntry = readTermIndexEntry();
 //
 //            int cmp = compareTerms(field, text, currentEntry);
-//            System.out.println("mid: " + mid + " cmp: " + cmp);
 //            if (cmp < 0) {
 //                high = mid - 1;
 //            } else {
 //                if (mid == blockCount - 1) {
-//                    System.out.println("mid == blockCount - 1");
 //                    return scanBlock(field, text, mid);
 //                }
 //
@@ -162,6 +154,45 @@ public class DictionaryFile extends SegmentFile {
 //
 //        return null;
 //    }
+
+    public Term findTerm(String field, String text) throws IOException {
+        System.out.println("Finding term: field=" + field + ", text=" + text);
+        System.out.println("blockCount: " + blockCount);
+        System.out.println("termIndexPosition: " + termIndexPosition);
+
+        int low = 0;
+        int high = blockCount - 1;
+
+        TermIndexEntry currentEntry, nextEntry;
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+
+            seek(termIndexPosition + blockOffsets[mid]);
+            System.out.println(Arrays.toString(blockOffsets));
+            currentEntry = readTermIndexEntry();
+
+            int cmp = compareTerms(field, text, currentEntry);
+            System.out.println("mid: " + mid + " cmp: " + cmp);
+            if (cmp < 0) {
+                high = mid - 1;
+            } else {
+                if (mid == blockCount - 1) {
+                    System.out.println("mid == blockCount - 1");
+                    return scanBlock(field, text, mid);
+                }
+
+                seek(termIndexPosition + blockOffsets[mid + 1]);
+                nextEntry = readTermIndexEntry();
+
+                if (compareTerms(field, text, nextEntry) < 0) {
+                    return scanBlock(field, text, mid);
+                }
+                low = mid + 1;
+            }
+        }
+
+        return null;
+    }
 
     private void writeTermIndexEntry(Term term, long recordPosition) throws IOException {
         byte[] fieldBytes = term.getField().getBytes(StandardCharsets.UTF_8);
@@ -240,6 +271,8 @@ public class DictionaryFile extends SegmentFile {
         seek(entry.recordPosition);
         int termsScanned = 0;
 
+        System.out.println("termIndexPosition while scanning block: " + termIndexPosition);
+
         while (termsScanned < INDEX_BLOCK_SIZE && position < termIndexPosition) {
             System.out.println("termsScanned: " + termsScanned + " position: " + position);
             Term term = readTermRecord();
@@ -247,6 +280,7 @@ public class DictionaryFile extends SegmentFile {
             int cmp = compareTerms(field, text, term);
 
             if (cmp == 0) {
+                System.out.println("found the right term: " + term.getField() + " " + term.getText() );
                 return term;
             }
             if (cmp < 0) {

@@ -32,7 +32,7 @@ public class DictionaryFile extends SegmentFile {
         return FileType.DIC;
     }
 
-    public void writeTermRecord(Term term, long postingPosition) throws IOException {
+    public void writeTermRecord(Term term) throws IOException {
         long recordPosition = termRecordsPosition;
 
         byte[] fieldBytes = term.getField().getBytes(StandardCharsets.UTF_8);
@@ -44,7 +44,7 @@ public class DictionaryFile extends SegmentFile {
         writeBytes(ByteBuffer.wrap(textBytes));
 
         writeInt(term.getDocumentFrequency());
-        writeLong(postingPosition);
+        writeLong(term.getPostingPosition());
 
         termPositions.put(term, recordPosition);
         termRecordsPosition = position;

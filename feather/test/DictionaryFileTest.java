@@ -55,7 +55,7 @@ public class DictionaryFileTest {
         Term term = new Term("title", "apple", 1, 1000L);
 
         // When
-        dictionaryFile.writeTermRecord(term, term.getPostingPosition());
+        dictionaryFile.writeTermRecord(term);
         dictionaryFile.writeTermIndex();
         dictionaryFile.flush();
 
@@ -80,7 +80,7 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.writeTermRecord(term, term.getPostingPosition());
+            dictionaryFile.writeTermRecord(term);
         }
         dictionaryFile.writeTermIndex();
 
@@ -106,7 +106,7 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.writeTermRecord(term, term.getPostingPosition());
+            dictionaryFile.writeTermRecord(term);
         }
         dictionaryFile.writeTermIndex();
 
@@ -126,7 +126,7 @@ public class DictionaryFileTest {
     void findNonExistentTerm() throws IOException {
         // Given
         Term term = new Term("title", "apple", 1, 1000L);
-        dictionaryFile.writeTermRecord(term, term.getPostingPosition());
+        dictionaryFile.writeTermRecord(term);
         dictionaryFile.writeTermIndex();
         dictionaryFile.flush();
 
@@ -142,7 +142,7 @@ public class DictionaryFileTest {
         Term term = new Term("title", longText, 1, 1000L);
 
         // When
-        dictionaryFile.writeTermRecord(term, term.getPostingPosition());
+        dictionaryFile.writeTermRecord(term);
         dictionaryFile.writeTermIndex();
 
         // Then
@@ -161,7 +161,7 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.writeTermRecord(term, term.getPostingPosition());
+            dictionaryFile.writeTermRecord(term);
         }
         dictionaryFile.writeTermIndex();
 
@@ -189,7 +189,7 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.writeTermRecord(term, term.getPostingPosition());
+            dictionaryFile.writeTermRecord(term);
         }
         dictionaryFile.writeTermIndex();
 

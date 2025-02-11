@@ -240,7 +240,7 @@ public class DictionaryFile extends SegmentFile {
         seek(entry.recordPosition);
         int termsScanned = 0;
 
-        while (termsScanned < INDEX_BLOCK_SIZE && position < size()) {
+        while (termsScanned < INDEX_BLOCK_SIZE && position < termIndexPosition) {
             System.out.println("termsScanned: " + termsScanned + " position: " + position);
             Term term = readTermRecord();
             System.out.println("Term in the scanned block: text=" + term.getText() + " field=" + term.getField());

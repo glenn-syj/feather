@@ -19,7 +19,6 @@ public abstract class Storage implements Closeable {
     public abstract SegmentFile createFile(String name, FileType type) throws IOException;
     public abstract SegmentFile openFile(String name) throws IOException;
     public abstract void deleteFile(String name) throws IOException;
-    public abstract boolean exists(String name);
     public abstract String[] listFiles() throws IOException;
 
     @Override

@@ -28,28 +28,6 @@ public abstract class SegmentFile implements Closeable {
         validateFileType();
     }
 
-    protected SegmentFile(FileChannel channel, int bufferSize, FeatherFileHeader header)
-            throws IOException {
-        this.channel = channel;
-        this.buffer = ByteBuffer.allocate(bufferSize);
-
-        if (header != null) {
-            this.header = header;
-            header.writeTo(channel);
-        } else if (channel.size() == 0) {
-            this.header = new FeatherFileHeader(
-                    getFileType(),
-                    0
-            );
-            this.header.writeTo(channel);
-        } else {
-            this.header = readHeader();
-        }
-
-        this.position = FeatherFileHeader.HEADER_SIZE;
-        validateFileType();
-    }
-
     private FeatherFileHeader readHeader() throws IOException {
         if (channel.size() < FeatherFileHeader.HEADER_SIZE) {
             throw new InvalidHeaderException(
@@ -75,10 +53,6 @@ public abstract class SegmentFile implements Closeable {
 
     protected abstract FileType getFileType();
 
-    public void flush() throws IOException {
-        channel.force(false);
-    }
-
     public long size() throws IOException {
         return channel.size();
     }
@@ -89,22 +63,6 @@ public abstract class SegmentFile implements Closeable {
         buffer.flip();
         position += 4;
         return buffer.getInt();
-    }
-
-    protected void writeInt(int value) throws IOException {
-        buffer.clear();
-        buffer.putInt(value);
-        buffer.flip();
-        channel.write(buffer, position);
-        position += 4;
-    }
-
-    protected void writeLong(long value) throws IOException {
-        buffer.clear();
-        buffer.putLong(value);
-        buffer.flip();
-        channel.write(buffer, position);
-        position += 8;
     }
 
     protected long readLong() throws IOException {
@@ -123,27 +81,12 @@ public abstract class SegmentFile implements Closeable {
         return buffer.getShort();
     }
 
-    protected void writeShort(short value) throws IOException {
-        buffer.clear();
-        buffer.putShort(value);
-        buffer.flip();
-        channel.write(buffer, position);
-        position += 2;
-    }
-
     protected ByteBuffer readBytes(int length) throws IOException {
         ByteBuffer data = ByteBuffer.allocate(length);
         channel.read(data, position);
         position += length;
         data.flip();
         return data;
-    }
-
-    protected void writeBytes(ByteBuffer data) throws IOException {
-        data.position(0);
-        int length = data.remaining();
-        channel.write(data, position);
-        position += length;
     }
 
     protected void seek(long newPosition) throws IOException {
@@ -173,7 +116,6 @@ public abstract class SegmentFile implements Closeable {
     public void close() throws IOException {
         if (!closed) {
             try {
-                flush();
                 channel.close();
             } finally {
                 closed = true;

@@ -38,7 +38,11 @@ public class FileSystemStorage extends Storage {
     public SegmentFile openFile(String name) throws IOException {
         ensureOpen();
         Path filePath = rootPath.resolve(name);
-        FileChannel channel = FileChannel.open(filePath, StandardOpenOption.READ);
+
+        // Open file in read/write mode to prevent NonWritableChannelException
+        // Note: Current SegmentFile implementation attempts to write headers when constructing
+        // Future improvement: Add read-only mode support
+        FileChannel channel = FileChannel.open(filePath, StandardOpenOption.READ, StandardOpenOption.WRITE);
 
         FeatherFileHeader header = FeatherFileHeader.readFrom(channel);
         return createSegmentFile(channel, header.getFileType());

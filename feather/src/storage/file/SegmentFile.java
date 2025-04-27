@@ -5,6 +5,7 @@ import storage.exception.InvalidHeaderException;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 
 public abstract class SegmentFile implements Closeable {
@@ -24,7 +25,6 @@ public abstract class SegmentFile implements Closeable {
         this.channel = channel;
         this.buffer = ByteBuffer.allocate(bufferSize);
         this.header = readHeader();
-        this.position = FeatherFileHeader.HEADER_SIZE;
         validateFileType();
     }
 
@@ -91,8 +91,8 @@ public abstract class SegmentFile implements Closeable {
 
     protected void seek(long newPosition) throws IOException {
         this.position = newPosition;
-        buffer.clear();
     }
+
 
     public void seekToContent() throws IOException {
         seek(FeatherFileHeader.HEADER_SIZE);

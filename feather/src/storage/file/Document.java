@@ -38,4 +38,13 @@ public class Document {
     public Map<String, Object> getFields() {
         return Collections.unmodifiableMap(fields);
     }
+
+    @Override
+    public String toString() {
+        return String.format("Document{id=%d, timestamp=%d, fields=%s}",
+                id,
+                timestamp,
+                fields.toString()
+        );
+    }
 }

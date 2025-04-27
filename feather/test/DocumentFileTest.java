@@ -6,9 +6,9 @@ import storage.file.Document;
 import storage.file.DocumentFile;
 import storage.file.FeatherFileHeader;
 import storage.file.FileType;
+import storage.writer.DocumentFileWriter;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -22,29 +22,25 @@ class DocumentFileTest {
 
     private Path filePath;
     private FileChannel channel;
-    private DocumentFile documentFile;
+    private DocumentFile file;
+    private DocumentFileWriter writer;
 
     @BeforeEach
     void setUp() throws IOException {
-        filePath = tempDir.resolve("test.doc");
-        channel = FileChannel.open(filePath,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.READ,
-                StandardOpenOption.WRITE);
+        filePath = tempDir.resolve("test.bin");
         FeatherFileHeader header = new FeatherFileHeader(FileType.DOC, 0);
-        documentFile = new DocumentFile(channel, 8192, header);
+        writer = new DocumentFileWriter(filePath, 8192);
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        documentFile.close();
-        if (channel != null && channel.isOpen()) {
-            channel.close();
-        }
+        // writable channels always get closed when complete()
+        writer = null;
+        file = null;
     }
 
     @Test
-    void writeAndReadDocument() throws IOException {
+    void writeAndReadDocument() throws IOException, InterruptedException {
         // Given
         Document doc = new Document(1);
         doc.addField("title", "Test Document");
@@ -53,11 +49,11 @@ class DocumentFileTest {
         doc.addField("data", new byte[]{1, 2, 3, 4});
 
         // When
-        documentFile.writeDocument(doc);
-        documentFile.flush();
+        writer.writeDocument(doc);
+        file = writer.complete();
 
-        documentFile.seekToContent();
-        Document readDoc = documentFile.readDocument();
+        file.seekToContent();
+        Document readDoc = file.readDocument();
 
         // Then
         assertEquals(1, readDoc.getId());
@@ -77,13 +73,13 @@ class DocumentFileTest {
         doc2.addField("title", "Second Document");
 
         // When
-        documentFile.writeDocument(doc1);
-        documentFile.writeDocument(doc2);
-        documentFile.flush();
+        writer.writeDocument(doc1);
+        writer.writeDocument(doc2);
+        file = writer.complete();
 
-        documentFile.seekToContent();
-        Document readDoc1 = documentFile.readDocument();
-        Document readDoc2 = documentFile.readDocument();
+        file.seekToContent();
+        Document readDoc1 = file.readDocument();
+        Document readDoc2 = file.readDocument();
 
         // Then
         assertEquals("First Document", readDoc1.getField("title"));
@@ -101,11 +97,12 @@ class DocumentFileTest {
         doc.addField("content", largeContent.toString());
 
         // When
-        documentFile.writeDocument(doc);
-        documentFile.flush();
+        writer.writeDocument(doc);
+        file = writer.complete();
 
-        documentFile.seekToContent();
-        Document readDoc = documentFile.readDocument();
+        file.seekToContent();
+        System.out.println(file.size());
+        Document readDoc = file.readDocument();
 
         // Then
         assertEquals(largeContent.toString(), readDoc.getField("content"));
@@ -120,11 +117,11 @@ class DocumentFileTest {
         doc.addField("binary", new byte[]{5, 6, 7, 8});
 
         // When
-        documentFile.writeDocument(doc);
-        documentFile.flush();
+        writer.writeDocument(doc);
+        file = writer.complete();
 
-        documentFile.seekToContent();
-        Document readDoc = documentFile.readDocument();
+        file.seekToContent();
+        Document readDoc = file.readDocument();
 
         // Then
         assertEquals("text value", readDoc.getField("string"));
@@ -139,8 +136,8 @@ class DocumentFileTest {
         doc.addField("title", "Test");
 
         // When
-        documentFile.writeDocument(doc);
-        documentFile.flush();
+        writer.writeDocument(doc);
+        file = writer.complete();
 
         // Then
         long expectedSize = FeatherFileHeader.HEADER_SIZE +
@@ -151,7 +148,7 @@ class DocumentFileTest {
                 1 +
                 4 + "Test".getBytes(StandardCharsets.UTF_8).length;
 
-        assertEquals(expectedSize, documentFile.size());
+        assertEquals(expectedSize, file.size());
     }
 
     @Test
@@ -163,11 +160,9 @@ class DocumentFileTest {
         doc2.addField("title", "Second Document");
 
         // When
-        documentFile.writeDocument(doc1);
-        documentFile.writeDocument(doc2);
-        documentFile.flush();
-
-        documentFile.close();
+        writer.writeDocument(doc1);
+        writer.writeDocument(doc2);
+        file = writer.complete();
 
         try (FileChannel newChannel = FileChannel.open(filePath, StandardOpenOption.READ);
              DocumentFile newDocFile = new DocumentFile(newChannel, 8192)) {

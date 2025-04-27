@@ -49,6 +49,8 @@ public final class FeatherFileHeader {
     }
 
     public void writeTo(FileChannel channel) throws IOException {
+        // when writing or updating a header, the position must be 0
+        channel.position(0);
         DataOutputStream dos = new DataOutputStream(
                 Channels.newOutputStream(channel));
         writeTo(dos);

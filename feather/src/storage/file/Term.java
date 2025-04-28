@@ -64,6 +64,16 @@ public class Term implements Comparable<Term> {
         return Objects.hash(field, text);
     }
 
+    @Override
+    public String toString() {
+        return String.format("Term{field='%s', text='%s', df=%d, position=%d}",
+                field,
+                text,
+                documentFrequency,
+                postingPosition
+        );
+    }
+
     public static class TermStatistics {
 
         private int docFreq;

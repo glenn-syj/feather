@@ -3,6 +3,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import storage.FileSystemStorage;
 import storage.file.*;
+import storage.writer.MetaFileWriter;
+import storage.writer.SegmentFileWriter;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,23 +13,6 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
-/* TODO: Design issues found during testing:
- * 1. Current design allows file modification after creation
- *    - shouldHandleFileHeaderCorrectly test shows we can open and modify files
- *    - This violates Lucene-style immutable segment file model
- *    - Can lead to concurrency issues when multiple threads access the same file
- *    - May cause consistency problems between memory and disk states
- *    - Cache coherency issues when multiple instances read the same file
- *
- * 2. No separation between file creation and reading
- *    - createFile() returns modifiable SegmentFile instance
- *    - Should use separate Writer for creation and SegmentFile for reading
- *
- * 3. Missing validation for file state
- *    - No guarantee that file is properly initialized before use
- *    - Need to ensure all required data is written during creation
- */
 class FileSystemStorageTest {
     @TempDir
     Path tempDir;
@@ -42,8 +27,7 @@ class FileSystemStorageTest {
     @Test
     void shouldThrowExceptionWhenClosed() throws IOException {
         storage.close();
-
-        assertThrows(IllegalStateException.class, () -> storage.createFile("test.doc", FileType.DOC));
+        assertThrows(IllegalStateException.class, () -> storage.createFileWriter("test", FileType.DOC));
         assertThrows(IllegalStateException.class, () -> storage.openFile("test.doc"));
         assertThrows(IllegalStateException.class, () -> storage.deleteFile("test.doc"));
         assertThrows(IllegalStateException.class, () -> storage.listFiles());
@@ -52,18 +36,17 @@ class FileSystemStorageTest {
     @Test
     void shouldCreateAndOpenFile() throws IOException {
         // Given
-        String fileName = "test.doc";
+        String fileName = "test";
 
         // When
-        SegmentFile created = storage.createFile(fileName, FileType.DOC);
+        SegmentFileWriter writer = storage.createFileWriter(fileName, FileType.DOC);
+        writer.complete();
 
         // Then
-        assertNotNull(created);
-        assertTrue(created instanceof DocumentFile);
-        assertTrue(Files.exists(tempDir.resolve(fileName)));
+        assertTrue(Files.exists(tempDir.resolve(fileName + FileType.DOC.getExtension())));
 
         // When
-        SegmentFile opened = storage.openFile(fileName);
+        SegmentFile opened = storage.openFile(fileName + FileType.DOC.getExtension());
 
         // Then
         assertNotNull(opened);
@@ -72,26 +55,31 @@ class FileSystemStorageTest {
 
     @Test
     void shouldHandleDifferentFileTypes() throws IOException {
-        // Test each file type
-        testFileType("test.doc", FileType.DOC, DocumentFile.class);
-        testFileType("test.dic", FileType.DIC, DictionaryFile.class);
-        testFileType("test.post", FileType.POST, PostingFile.class);
-        testFileType("test.meta", FileType.META, MetaFile.class);
+        testFileType("test", FileType.DOC, DocumentFile.class);
+        testFileType("test", FileType.DIC, DictionaryFile.class);
+        testFileType("test", FileType.POST, PostingFile.class);
+        
+        // MetaFile requires metadata
+        SegmentMetadata metadata = new SegmentMetadata(0, 0, 0);
+        MetaFileWriter writer = storage.createMetaFileWriter("test", metadata);
+        SegmentFile file = writer.complete();
+        assertTrue(file instanceof MetaFile);
     }
 
     private void testFileType(String fileName, FileType type, Class<?> expectedClass) throws IOException {
-        SegmentFile file = storage.createFile(fileName, type);
+        SegmentFileWriter writer = storage.createFileWriter(fileName, type);
+        SegmentFile file = writer.complete();
         assertNotNull(file);
         assertTrue(expectedClass.isInstance(file));
-        assertTrue(Files.exists(tempDir.resolve(fileName)));
+        assertTrue(Files.exists(tempDir.resolve(fileName + type.getExtension())));
     }
 
     @Test
     void shouldListAllFiles() throws IOException {
         // Given
-        storage.createFile("1.doc", FileType.DOC);
-        storage.createFile("2.dic", FileType.DIC);
-        storage.createFile("3.post", FileType.POST);
+        createTestFile("1", FileType.DOC);
+        createTestFile("2", FileType.DIC);
+        createTestFile("3", FileType.POST);
 
         // When
         String[] files = storage.listFiles();
@@ -102,6 +90,30 @@ class FileSystemStorageTest {
         assertTrue(containsFile(files, "1.doc"));
         assertTrue(containsFile(files, "2.dic"));
         assertTrue(containsFile(files, "3.post"));
+    }
+
+    @Test
+    void shouldListFilesByType() throws IOException {
+        // Given
+        createTestFile("1", FileType.DOC);
+        createTestFile("2", FileType.DOC);
+        createTestFile("3", FileType.DIC);
+
+        // When
+        String[] docFiles = storage.listFiles(FileType.DOC);
+        String[] dicFiles = storage.listFiles(FileType.DIC);
+
+        // Then
+        assertEquals(2, docFiles.length);
+        assertEquals(1, dicFiles.length);
+        assertTrue(containsFile(docFiles, "1.doc"));
+        assertTrue(containsFile(docFiles, "2.doc"));
+        assertTrue(containsFile(dicFiles, "3.dic"));
+    }
+
+    private void createTestFile(String name, FileType type) throws IOException {
+        SegmentFileWriter writer = storage.createFileWriter(name, type);
+        writer.complete();
     }
 
     private boolean containsFile(String[] files, String fileName) {
@@ -121,15 +133,17 @@ class FileSystemStorageTest {
     @Test
     void shouldDeleteFile() throws IOException {
         // Given
-        String fileName = "test.doc";
-        storage.createFile(fileName, FileType.DOC);
-        assertTrue(Files.exists(tempDir.resolve(fileName)));
+        String fileName = "test";
+        SegmentFileWriter writer = storage.createFileWriter(fileName, FileType.DOC);
+        writer.complete();
+        String fullName = fileName + FileType.DOC.getExtension();
+        assertTrue(Files.exists(tempDir.resolve(fullName)));
 
         // When
-        storage.deleteFile(fileName);
+        storage.deleteFile(fullName);
 
         // Then
-        assertFalse(Files.exists(tempDir.resolve(fileName)));
+        assertFalse(Files.exists(tempDir.resolve(fullName)));
     }
 
     @Test
@@ -145,16 +159,15 @@ class FileSystemStorageTest {
     @Test
     void shouldHandleFileHeaderCorrectly() throws IOException {
         // Given
-        String fileName = "test.doc";
+        String fileName = "test";
 
         // When
-        SegmentFile created = storage.createFile(fileName, FileType.DOC);
-        created.close();
-
-        SegmentFile opened = storage.openFile(fileName);
+        SegmentFileWriter writer = storage.createFileWriter(fileName, FileType.DOC);
+        SegmentFile file = writer.complete();
 
         // Then
-        assertEquals(FileType.DOC, opened.getHeaderFileType());
+        assertEquals(FileType.DOC, file.getHeaderFileType());
+        file.close();
     }
 
     @Test
@@ -166,7 +179,86 @@ class FileSystemStorageTest {
 
     @Test
     void shouldThrowWhenCreatingInvalidDirectory() {
-        Path invalidPath = tempDir.resolve("invalid\0path");
-        assertThrows(InvalidPathException.class, () -> new FileSystemStorage(invalidPath));
+        assertThrows(InvalidPathException.class,
+                () -> new FileSystemStorage(tempDir.resolve("invalid<path")));
+        assertThrows(InvalidPathException.class,
+                () -> new FileSystemStorage(tempDir.resolve("invalid>path")));
+        assertThrows(InvalidPathException.class,
+                () -> new FileSystemStorage(tempDir.resolve("invalid:path")));
+        assertThrows(InvalidPathException.class,
+                () -> new FileSystemStorage(tempDir.resolve("invalid\"path")));
+        assertThrows(InvalidPathException.class,
+                () -> new FileSystemStorage(tempDir.resolve("invalid|path")));
+        assertThrows(InvalidPathException.class,
+                () -> new FileSystemStorage(tempDir.resolve("invalid?path")));
+        assertThrows(InvalidPathException.class,
+                () -> new FileSystemStorage(tempDir.resolve("invalid*path")));
+    }
+
+    @Test
+    void shouldThrowWhenCreatingFileWithExistingName() throws IOException {
+        // Given
+        String fileName = "test";
+        SegmentFileWriter writer1 = storage.createFileWriter(fileName, FileType.DOC);
+        writer1.complete();
+
+        // When & Then
+        assertThrows(IOException.class, () -> storage.createFileWriter(fileName, FileType.DOC));
+    }
+
+    @Test
+    void shouldThrowWhenUsingDeprecatedCreateFile() throws IOException {
+        assertThrows(UnsupportedOperationException.class, 
+            () -> storage.createFile("test", FileType.DOC));
+    }
+
+    @Test
+    void shouldCreateAndOpenMetaFile() throws IOException {
+        // Given
+        String fileName = "test";
+        SegmentMetadata metadata = new SegmentMetadata(10, 1, 10);  // docCount, minDocId, maxDocId
+
+        // When
+        MetaFileWriter writer = storage.createMetaFileWriter(fileName, metadata);
+        SegmentFile file = writer.complete();
+
+        // Then
+        assertTrue(Files.exists(tempDir.resolve(fileName + FileType.META.getExtension())));
+
+        // When
+        SegmentFile opened = storage.openFile(fileName + FileType.META.getExtension());
+
+        // Then
+        assertNotNull(opened);
+        assertTrue(opened instanceof MetaFile);
+        assertEquals(FileType.META, opened.getHeaderFileType());
+    }
+
+    @Test
+    void shouldThrowWhenCreatingMetaFileWithNullMetadata() {
+        String fileName = "test";
+        assertThrows(IllegalArgumentException.class, 
+            () -> storage.createMetaFileWriter(fileName, null));
+    }
+
+    @Test
+    void shouldThrowWhenCreatingMetaFileWithInvalidMetadata() {
+        String fileName = "test";
+        
+        // Invalid document count
+        assertThrows(IllegalArgumentException.class,
+            () -> storage.createMetaFileWriter(fileName + "1", new SegmentMetadata(-1, 0, 0)));
+
+        // Invalid document ID range
+        assertThrows(IllegalArgumentException.class, 
+            () -> storage.createMetaFileWriter(fileName + "2", new SegmentMetadata(1, 10, 5)));
+        
+        // Negative document ID with non-zero count
+        assertThrows(IllegalArgumentException.class, 
+            () -> storage.createMetaFileWriter(fileName + "3", new SegmentMetadata(1, -1, 1)));
+        
+        // Document count exceeds ID range
+        assertThrows(IllegalArgumentException.class, 
+            () -> storage.createMetaFileWriter(fileName + "4", new SegmentMetadata(3, 1, 2)));
     }
 }

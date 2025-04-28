@@ -14,11 +14,6 @@ public class PostingFile extends SegmentFile {
         super(channel, validateBufferSize(bufferSize));
     }
 
-    public PostingFile(FileChannel channel, int bufferSize, FeatherFileHeader header) throws IOException {
-        super(channel, validateBufferSize(bufferSize), header);
-        validateFileType(header);
-    }
-
     private static int validateBufferSize(int bufferSize) {
         if (bufferSize < MIN_BUFFER_SIZE) {
             throw new IllegalArgumentException(
@@ -37,40 +32,6 @@ public class PostingFile extends SegmentFile {
     @Override
     protected FileType getFileType() {
         return FileType.POST;
-    }
-
-    public void writePostingList(List<Posting> postings) throws IOException {
-        if (postings == null) {
-            throw new IllegalArgumentException("Postings list cannot be null");
-        }
-
-        postings.sort(Posting::compareTo);
-
-        writeInt(postings.size());
-
-        // Delta encoding for document IDs
-        int prevDocId = 0;
-        for (Posting posting : postings) {
-            // Write delta-encoded document ID
-            int deltaDocId = posting.getDocumentId() - prevDocId;
-            writeInt(deltaDocId);
-            prevDocId = posting.getDocumentId();
-
-            // Write frequency
-            writeInt(posting.getFrequency());
-
-            // Write positions with delta encoding
-            int[] positions = posting.getPositions();
-            writeInt(positions.length);
-
-            int prevPosition = 0;
-            for (int position : positions) {
-                int deltaPosition = position - prevPosition;
-                writeInt(deltaPosition);
-                prevPosition = position;
-            }
-        }
-        flush();
     }
 
     public List<Posting> readPostingList() throws IOException {

@@ -12,31 +12,9 @@ public class MetaFile extends SegmentFile {
         TODO: need to refactor the validation code based on validator pattern
      */
 
-    public MetaFile(FileChannel channel, int bufferSize, SegmentMetadata metadata) throws IOException {
-        super(channel, bufferSize);
-        this.metadata = metadata;
-        writeMetadata();
-        validateMetadata(metadata);
-        validateHeaderConsistency(header, this.metadata);
-    }
-
     public MetaFile(FileChannel channel, int bufferSize) throws IOException {
         super(channel, bufferSize);
         this.metadata = readMetadata();
-        validateMetadata(metadata);
-        validateHeaderConsistency(header, this.metadata);
-    }
-
-    public MetaFile(FileChannel channel, int bufferSize, FeatherFileHeader header) throws IOException {
-        super(channel, bufferSize, header);
-        this.metadata = readMetadata();
-        validateMetadata(metadata);
-        validateHeaderConsistency(header, this.metadata);
-    }
-
-    public MetaFile(FileChannel channel, int bufferSize, FeatherFileHeader header, SegmentMetadata metadata) throws IOException {
-        super(channel, bufferSize, header);
-        this.metadata = metadata;
         validateMetadata(metadata);
         validateHeaderConsistency(header, this.metadata);
     }
@@ -89,26 +67,11 @@ public class MetaFile extends SegmentFile {
         }
     }
 
-    private void writeMetadata() throws IOException {
-        long currentPosition = channel.position();
-        channel.position(FeatherFileHeader.HEADER_SIZE);
-
-        metadata.writeTo(channel, channel.position());
-
-        channel.position(currentPosition);
-
-        flush();
-    }
-
     private SegmentMetadata readMetadata() throws IOException {
         long currentPosition = channel.position();
-
         channel.position(FeatherFileHeader.HEADER_SIZE);
-
         SegmentMetadata metadata = SegmentMetadata.read(channel, channel.position());
-
         channel.position(currentPosition);
-
         return metadata;
     }
 

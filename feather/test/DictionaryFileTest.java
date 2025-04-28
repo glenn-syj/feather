@@ -6,10 +6,10 @@ import storage.file.DictionaryFile;
 import storage.file.FeatherFileHeader;
 import storage.file.FileType;
 import storage.file.Term;
+import storage.writer.DictionaryFileWriter;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
@@ -22,31 +22,20 @@ public class DictionaryFileTest {
     @TempDir
     Path tempDir;
 
-    private DictionaryFile dictionaryFile;
     private Path filePath;
-    private FileChannel channel;
+    private DictionaryFile file;
+    private DictionaryFileWriter writer;
 
     @BeforeEach
     void setUp() throws IOException {
         filePath = tempDir.resolve("test.dic");
-        Files.deleteIfExists(filePath);
-
-        channel = FileChannel.open(filePath,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.READ,
-                StandardOpenOption.WRITE);
-
-        FeatherFileHeader header = new FeatherFileHeader(FileType.DIC, 0);
-        header.writeTo(channel);
-
-        dictionaryFile = new DictionaryFile(channel, BUFFER_SIZE, header);
+        writer = new DictionaryFileWriter(filePath, BUFFER_SIZE);
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        if (channel != null && channel.isOpen()) {
-            channel.close();
-        }
+        writer = null;
+        file = null;
     }
 
     @Test
@@ -55,11 +44,12 @@ public class DictionaryFileTest {
         Term term = new Term("title", "apple", 1, 1000L);
 
         // When
-        dictionaryFile.addTermRecord(term);
-        dictionaryFile.flush();
+        writer.addTermRecord(term);
+        file = writer.complete();
+        file.seekToContent();
 
         // Then
-        Term found = dictionaryFile.findTerm("title", "apple");
+        Term found = file.findTerm("title", "apple");
         assertNotNull(found);
         assertEquals("title", found.getField());
         assertEquals("apple", found.getText());
@@ -79,17 +69,17 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.addTermRecord(term);
+            writer.addTermRecord(term);
         }
-        dictionaryFile.flush();
+        file = writer.complete();
 
         // Then
-        Term found1 = dictionaryFile.findTerm("title", "banana");
+        Term found1 = file.findTerm("title", "banana");
         assertNotNull(found1);
         assertEquals("banana", found1.getText());
         assertEquals(2, found1.getDocumentFrequency());
 
-        Term found2 = dictionaryFile.findTerm("content", "apple");
+        Term found2 = file.findTerm("content", "apple");
         assertNotNull(found2);
         assertEquals("content", found2.getField());
         assertEquals(4, found2.getDocumentFrequency());
@@ -105,18 +95,18 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.addTermRecord(term);
+            writer.addTermRecord(term);
         }
-        dictionaryFile.flush();
+        file = writer.complete();
 
         // Then
         // Term in first block
-        Term found1 = dictionaryFile.findTerm("title", "term0");
+        Term found1 = file.findTerm("title", "term0");
         assertNotNull(found1);
         assertEquals(0L, found1.getPostingPosition());
 
         // Term in second block
-        Term found2 = dictionaryFile.findTerm("title", "term" + INDEX_BLOCK_SIZE);
+        Term found2 = file.findTerm("title", "term" + INDEX_BLOCK_SIZE);
         assertNotNull(found2);
         assertEquals(INDEX_BLOCK_SIZE * 1000L, found2.getPostingPosition());
     }
@@ -125,12 +115,12 @@ public class DictionaryFileTest {
     void findNonExistentTerm() throws IOException {
         // Given
         Term term = new Term("title", "apple", 1, 1000L);
-        dictionaryFile.addTermRecord(term);
-        dictionaryFile.flush();
+        writer.addTermRecord(term);
+        file = writer.complete();
 
         // When & Then
-        assertNull(dictionaryFile.findTerm("title", "banana"));
-        assertNull(dictionaryFile.findTerm("content", "apple"));
+        assertNull(file.findTerm("title", "banana"));
+        assertNull(file.findTerm("content", "apple"));
     }
 
     @Test
@@ -140,11 +130,11 @@ public class DictionaryFileTest {
         Term term = new Term("title", longText, 1, 1000L);
 
         // When
-        dictionaryFile.addTermRecord(term);
-        dictionaryFile.flush();
+        writer.addTermRecord(term);
+        file = writer.complete();
 
         // Then
-        Term found = dictionaryFile.findTerm("title", longText);
+        Term found = file.findTerm("title", longText);
         assertNotNull(found);
         assertEquals(longText, found.getText());
     }
@@ -159,15 +149,15 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.addTermRecord(term);
+            writer.addTermRecord(term);
         }
-        dictionaryFile.flush();
+        file = writer.complete();
 
         // Then
         // Search terms near block boundaries
-        Term found1 = dictionaryFile.findTerm("title",
+        Term found1 = file.findTerm("title",
                 String.format("term%03d", INDEX_BLOCK_SIZE - 1));  // Last term in first block
-        Term found2 = dictionaryFile.findTerm("title",
+        Term found2 = file.findTerm("title",
                 String.format("term%03d", INDEX_BLOCK_SIZE));      // First term in second block
 
         assertNotNull(found1);
@@ -187,14 +177,34 @@ public class DictionaryFileTest {
 
         // When
         for (Term term : terms) {
-            dictionaryFile.addTermRecord(term);
+            writer.addTermRecord(term);
         }
-        dictionaryFile.flush();
+        file = writer.complete();
 
         // Then
-        Term found = dictionaryFile.findTerm("title", "\uBC14\uB098\uB098");
+        Term found = file.findTerm("title", "\uBC14\uB098\uB098");
         assertNotNull(found);
         assertEquals("\uBC14\uB098\uB098", found.getText());
         assertEquals(2000L, found.getPostingPosition());
+    }
+    
+    @Test
+    void verifyFileAfterReopen() throws IOException {
+        // Given
+        Term term = new Term("title", "apple", 1, 1000L);
+        writer.addTermRecord(term);
+        file = writer.complete();
+        file.close();
+        
+        // When - Reopen the file
+        try (FileChannel channel = FileChannel.open(filePath, StandardOpenOption.READ);
+             DictionaryFile reopenedFile = new DictionaryFile(channel, BUFFER_SIZE)) {
+            
+            // Then
+            Term found = reopenedFile.findTerm("title", "apple");
+            assertNotNull(found);
+            assertEquals("apple", found.getText());
+            assertEquals(1000L, found.getPostingPosition());
+        }
     }
 }

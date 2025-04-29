@@ -147,4 +147,8 @@ public class FileSystemStorage extends Storage {
         throw new UnsupportedOperationException(
                 "Direct file creation is no longer supported. Use createSegmentFileWriter() instead.");
     }
+
+    public Path getRootPath() {
+        return rootPath;
+    }
 }

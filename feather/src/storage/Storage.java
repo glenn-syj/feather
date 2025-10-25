@@ -16,6 +16,8 @@ public abstract class Storage implements Closeable {
     }
 
     // file operations
+    public abstract long fileLength(String name) throws IOException;
+    public abstract boolean fileExists(String name) throws IOException;
     public abstract SegmentFile createFile(String name, FileType type) throws IOException;
     public abstract SegmentFile openFile(String name) throws IOException;
     public abstract void deleteFile(String name) throws IOException;

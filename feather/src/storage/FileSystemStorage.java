@@ -37,8 +37,19 @@ public class FileSystemStorage extends Storage {
     @Override
     public SegmentFile openFile(String name) throws IOException {
         ensureOpen();
+
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("File name cannot be null or empty");
+        }
+        if (name.contains("..") || name.contains("/") || name.contains("\\")) {
+            throw new IllegalArgumentException("File name contains invalid characters");
+        }
+
         Path filePath = rootPath.resolve(name);
-        
+        if (!Files.exists(filePath)) {
+            throw new IOException("File does not exist: " + name);
+        }
+
         // Open file in read-only mode since SegmentFile is now read-only
         FileChannel channel = null;
         try {

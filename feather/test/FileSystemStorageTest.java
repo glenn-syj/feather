@@ -261,4 +261,122 @@ class FileSystemStorageTest {
         assertThrows(IllegalArgumentException.class, 
             () -> storage.createMetaFileWriter(fileName + "4", new SegmentMetadata(3, 1, 2)));
     }
+
+    @Test
+    void shouldCheckFileExists() throws IOException {
+        // Given
+        String fileName = "test";
+        String fullName = fileName + FileType.DOC.getExtension();
+        
+        // When - file doesn't exist
+        boolean existsBefore = storage.fileExists(fullName);
+        
+        // Then
+        assertFalse(existsBefore);
+        
+        // When - create file
+        SegmentFileWriter writer = storage.createFileWriter(fileName, FileType.DOC);
+        writer.complete();
+        
+        // When - file exists
+        boolean existsAfter = storage.fileExists(fullName);
+        
+        // Then
+        assertTrue(existsAfter);
+    }
+
+    @Test
+    void shouldThrowWhenCheckingFileExistsWithInvalidName() {
+        // Test null name
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists(null));
+        
+        // Test empty name
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists(""));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists("   "));
+        
+        // Test invalid characters
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists("../test.doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists("test/../doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists("test\\doc"));
+    }
+
+    @Test
+    void shouldGetFileLength() throws IOException {
+        // Given
+        String fileName = "test";
+        String fullName = fileName + FileType.DOC.getExtension();
+        
+        // When - create file
+        SegmentFileWriter writer = storage.createFileWriter(fileName, FileType.DOC);
+        SegmentFile file = writer.complete();
+        file.close();
+        
+        // When - get file length
+        long length = storage.fileLength(fullName);
+        
+        // Then
+        assertTrue(length > 0);
+        assertEquals(Files.size(tempDir.resolve(fullName)), length);
+    }
+
+    @Test
+    void shouldThrowWhenGettingLengthOfNonExistentFile() {
+        String fileName = "nonexistent.doc";
+        assertThrows(IOException.class, () -> storage.fileLength(fileName));
+    }
+
+    @Test
+    void shouldThrowWhenGettingFileLengthWithInvalidName() {
+        // Test null name
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength(null));
+        
+        // Test empty name
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength(""));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength("   "));
+        
+        // Test invalid characters
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength("../test.doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength("test/../doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength("test\\doc"));
+    }
+
+    @Test
+    void shouldThrowWhenClosedForFileLengthAndExists() throws IOException {
+        storage.close();
+        assertThrows(IllegalStateException.class, () -> storage.fileLength("test.doc"));
+        assertThrows(IllegalStateException.class, () -> storage.fileExists("test.doc"));
+    }
+
+    @Test
+    void shouldHandleFileLengthForDifferentFileTypes() throws IOException {
+        // Test DOC file
+        testFileLength("test1", FileType.DOC);
+        
+        // Test DIC file
+        testFileLength("test2", FileType.DIC);
+        
+        // Test POST file
+        testFileLength("test3", FileType.POST);
+        
+        // Test META file
+        SegmentMetadata metadata = new SegmentMetadata(5, 1, 5);
+        MetaFileWriter writer = storage.createMetaFileWriter("test4", metadata);
+        SegmentFile file = writer.complete();
+        file.close();
+        
+        long metaLength = storage.fileLength("test4.meta");
+        assertTrue(metaLength > 0);
+    }
+
+    private void testFileLength(String fileName, FileType type) throws IOException {
+        String fullName = fileName + type.getExtension();
+        
+        SegmentFileWriter writer = storage.createFileWriter(fileName, type);
+        SegmentFile file = writer.complete();
+        file.close();
+        
+        long length = storage.fileLength(fullName);
+        assertTrue(length > 0);
+        assertEquals(Files.size(tempDir.resolve(fullName)), length);
+    }
 }

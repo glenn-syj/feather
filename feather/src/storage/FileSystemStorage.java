@@ -40,10 +40,22 @@ public class FileSystemStorage extends Storage {
         Path filePath = rootPath.resolve(name);
         
         // Open file in read-only mode since SegmentFile is now read-only
-        FileChannel channel = FileChannel.open(filePath, StandardOpenOption.READ);
-        
-        FeatherFileHeader header = FeatherFileHeader.readFrom(channel);
-        return createSegmentFile(channel, header.getFileType());
+        FileChannel channel = null;
+        try {
+            channel = FileChannel.open(filePath, StandardOpenOption.READ);
+            FeatherFileHeader header = FeatherFileHeader.readFrom(channel);
+            return createSegmentFile(channel, header.getFileType());
+        } catch (IOException e) {
+            if (channel != null) {
+                try {
+                    channel.close();
+                } catch (IOException closeException) {
+                    // To trace its error chain, use addSuppressed()
+                    e.addSuppressed(closeException);
+                }
+            }
+            throw e;
+        }
     }
 
     /**

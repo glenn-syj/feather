@@ -27,6 +27,25 @@ public class FileSystemStorage extends Storage {
         }
     }
 
+    @Override
+    public long fileLength(String name) throws IOException {
+        ensureOpen();
+        validateFileName(name);
+        Path filePath = rootPath.resolve(name);
+        if (!Files.exists(filePath)) {
+            throw new IOException("File does not exist: " + name);
+        }
+        return Files.size(filePath);
+    }
+
+    @Override
+    public boolean fileExists(String name) throws IOException {
+        ensureOpen();
+        validateFileName(name);
+        Path filePath = rootPath.resolve(name);
+        return Files.exists(filePath);
+    }
+
     /**
      * Opens a segment file for reading.
      * 
@@ -37,13 +56,7 @@ public class FileSystemStorage extends Storage {
     @Override
     public SegmentFile openFile(String name) throws IOException {
         ensureOpen();
-
-        if (name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("File name cannot be null or empty");
-        }
-        if (name.contains("..") || name.contains("/") || name.contains("\\")) {
-            throw new IllegalArgumentException("File name contains invalid characters");
-        }
+        validateFileName(name);
 
         Path filePath = rootPath.resolve(name);
         if (!Files.exists(filePath)) {
@@ -79,6 +92,7 @@ public class FileSystemStorage extends Storage {
      */
     public SegmentFileWriter createFileWriter(String name, FileType type) throws IOException {
         ensureOpen();
+        validateFileName(name);
         Path filePath = rootPath.resolve(name + type.getExtension());
         
         return createSegmentFileWriter(filePath, type);
@@ -87,6 +101,7 @@ public class FileSystemStorage extends Storage {
     @Override
     public void deleteFile(String name) throws IOException {
         ensureOpen();
+        validateFileName(name);
         Files.deleteIfExists(rootPath.resolve(name));
     }
 
@@ -123,6 +138,21 @@ public class FileSystemStorage extends Storage {
     }
 
     /**
+     * Validates file name format.
+     * 
+     * @param name The file name to validate
+     * @throws IllegalArgumentException If the file name is invalid
+     */
+    private void validateFileName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("File name cannot be null or empty");
+        }
+        if (name.contains("..") || name.contains("/") || name.contains("\\")) {
+            throw new IllegalArgumentException("File name contains invalid characters");
+        }
+    }
+
+    /**
      * Creates the appropriate SegmentFile instance based on file type.
      */
     private SegmentFile createSegmentFile(FileChannel channel, FileType type) throws IOException {
@@ -156,6 +186,7 @@ public class FileSystemStorage extends Storage {
      */
     public MetaFileWriter createMetaFileWriter(String name, SegmentMetadata metadata) throws IOException {
         ensureOpen();
+        validateFileName(name);
         Path filePath = rootPath.resolve(name + FileType.META.getExtension());
         return new MetaFileWriter(filePath, BUFFER_SIZE, metadata);
     }
@@ -174,4 +205,5 @@ public class FileSystemStorage extends Storage {
     public Path getRootPath() {
         return rootPath;
     }
+
 }

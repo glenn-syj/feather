@@ -22,6 +22,7 @@ public abstract class Storage implements Closeable {
     public abstract SegmentFile openFile(String name) throws IOException;
     public abstract void deleteFile(String name) throws IOException;
     public abstract String[] listFiles() throws IOException;
+    public abstract void rename(String source, String dest) throws IOException;
 
     @Override
     public void close() throws IOException {

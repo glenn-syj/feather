@@ -114,6 +114,29 @@ public class FileSystemStorage extends Storage {
         }
     }
 
+    @Override
+    public void rename(String source, String dest) throws IOException {
+        ensureOpen();
+        validateFileName(source);
+        validateFileName(dest);
+
+        Path sourcePath = rootPath.resolve(source);
+        Path destPath = rootPath.resolve(dest);
+
+        // Check if the source file exists
+        if (!Files.exists(sourcePath)) {
+            throw new IOException("Source file does not exist: " + source);
+        }
+
+        // Check if the destination file exists, to prevent overwriting
+        if (Files.exists(destPath)) {
+            throw new IOException("Destination file already exists: " + dest);
+        }
+
+        // Atomically moves file
+        Files.move(sourcePath, destPath);
+    }
+
     /**
      * Lists all files of a specific type in the storage directory.
      * 

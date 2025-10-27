@@ -5,6 +5,7 @@ import storage.file.SegmentFile;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Collection;
 
 public abstract class Storage implements Closeable {
     private volatile boolean closed = false;
@@ -23,6 +24,9 @@ public abstract class Storage implements Closeable {
     public abstract void deleteFile(String name) throws IOException;
     public abstract String[] listFiles() throws IOException;
     public abstract void rename(String source, String dest) throws IOException;
+    public abstract void sync(Collection<String> names) throws IOException;
+    public abstract void syncMetaData() throws IOException;
+    
 
     @Override
     public void close() throws IOException {

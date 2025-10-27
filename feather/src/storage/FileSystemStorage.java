@@ -123,6 +123,10 @@ public class FileSystemStorage extends Storage {
         Path sourcePath = rootPath.resolve(source);
         Path destPath = rootPath.resolve(dest);
 
+        if (source.equals(dest)) {
+            return;
+        }
+
         // Check if the source file exists
         if (!Files.exists(sourcePath)) {
             throw new IOException("Source file does not exist: " + source);

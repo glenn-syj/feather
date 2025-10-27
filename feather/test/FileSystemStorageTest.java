@@ -1,5 +1,7 @@
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import storage.FileSystemStorage;
 import storage.file.*;
@@ -527,5 +529,60 @@ class FileSystemStorageTest {
         assertFalse(containsFile(filesAfter, "file1.doc"));
         assertTrue(containsFile(filesAfter, "renamed_file1.doc"));
         assertTrue(containsFile(filesAfter, "file2.doc"));
+    }
+
+    // ========== SYNC TESTS ==========
+
+    @Test
+    void shouldSyncFile() throws IOException {
+        // Given
+        String fileName = "test.doc";
+        createTestFile("test", FileType.DOC);
+        java.util.List<String> filesToSync = java.util.Collections.singletonList(fileName);
+
+        // When & Then
+        assertDoesNotThrow(() -> storage.sync(filesToSync));
+    }
+
+    @Test
+    void shouldSyncMultipleFiles() throws IOException {
+        // Given
+        createTestFile("file1", FileType.DOC);
+        createTestFile("file2", FileType.DIC);
+        java.util.List<String> filesToSync = java.util.Arrays.asList("file1.doc", "file2.dic");
+
+        // When & Then
+        assertDoesNotThrow(() -> storage.sync(filesToSync));
+    }
+
+    @Test
+    void shouldThrowWhenSyncingNonExistentFile() {
+        java.util.List<String> filesToSync = java.util.Collections.singletonList("nonexistent.doc");
+        assertThrows(IOException.class, () -> storage.sync(filesToSync));
+    }
+
+    @Test
+    void shouldThrowWhenSyncingWithInvalidName() {
+        java.util.List<String> invalidFiles = java.util.Collections.singletonList("../invalid.doc");
+        assertThrows(IllegalArgumentException.class, () -> storage.sync(invalidFiles));
+    }
+
+    @Test
+    void shouldThrowWhenClosedForSync() throws IOException {
+        storage.close();
+        java.util.List<String> filesToSync = java.util.Collections.singletonList("test.doc");
+        assertThrows(IllegalStateException.class, () -> storage.sync(filesToSync));
+    }
+
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void shouldSyncMetadata() {
+        assertDoesNotThrow(() -> storage.syncMetaData());
+    }
+
+    @Test
+    void shouldThrowWhenClosedForSyncMetadata() throws IOException {
+        storage.close();
+        assertThrows(IllegalStateException.class, () -> storage.syncMetaData());
     }
 }

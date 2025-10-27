@@ -8,6 +8,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Collection;
 import java.util.stream.Stream;
 
 /**
@@ -139,6 +140,33 @@ public class FileSystemStorage extends Storage {
 
         // Atomically moves file
         Files.move(sourcePath, destPath);
+    }
+
+    @Override
+    public void sync(Collection<String> names) throws IOException {
+        ensureOpen();
+        for (String name : names) {
+            validateFileName(name);
+            Path filePath = rootPath.resolve(name);
+
+            if (!Files.exists(filePath)) {
+                throw new IOException("File does not exist: " + name);
+            }
+
+            try (FileChannel channel = FileChannel.open(filePath,
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
+        }
+    }
+
+    @Override
+    public void syncMetaData() throws IOException {
+        ensureOpen();
+        try (FileChannel channel = FileChannel.open(rootPath)) {
+            channel.force(true);
+        }
     }
 
     /**

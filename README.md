@@ -1,6 +1,31 @@
 # Feather
 
-Feather project is a lightweight search engine & document-based nosql database written in Java, designed for efficient document indexing and retrieval.
+## Key Value Proposition
+
+The Feather project is designed to be the leading **Ultra-Lightweight Search Engine & Document-based NoSQL Database** in the Java ecosystem, referencing `Apache Lucene`.
+
+We offer a compelling alternative to both complex RDBMS Full-Text Search and high-overhead enterprise engines like Elasticsearch. Our value proposition is defined by three core principles:
+
+### 1. Ultra-Lightweight (Minimal Footprint)
+
+Feather's architecture is built to maximize resource efficiency and challenge the memory overhead of traditional solutions.
+
+- **Lowest Memory Footprint:** We achieve aggressive memory savings through **byte-level file format optimization** and compact internal data structures, making Feather ideal for **small servers, single-instance deployments, and resource-constrained environments.**
+- **Optimal Resource Usage:** The engine is meticulously designed to minimize JVM Garbage Collection (GC) load, ensuring stable, **low-latency performance** without requiring dedicated system resources.
+
+### 2. Simplicity & Developer Experience (Zero-Friction DX)
+
+We eliminate the operational complexity of large search systems, allowing developers to focus purely on application logic.
+
+- **Zero-Configuration:** Start using Feather instantly with **no external dependencies, setup files, or complex tuning.**
+- **Intuitive API & Integrability:** Feather can be used **flexibly**—either integrated directly as a **single JAR file** for local access, or deployed as a **lightweight server** to provide remote access via simple HTTP/REST communication for **easy integration with simple services**
+
+### 3. Search & Document Integration (Specialized Power)
+
+Feather unifies storage and retrieval, offering a specialized, powerful solution that removes the need for RDB knowledge.
+
+- **NoSQL Search Specialization:** Serves as a unified solution, combining **document storage** and **professional search indexing** without the need for complex SQL or relational modeling.
+- **Superior Search Relevance:** Delivers highly relevant search ranking and performance that **significantly surpasses** the basic Full-Text Search capabilities of conventional Relational Database Systems (RDBs).
 
 ## Current Features
 

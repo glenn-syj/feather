@@ -8,6 +8,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Collection;
 import java.util.stream.Stream;
 
 /**
@@ -27,6 +28,25 @@ public class FileSystemStorage extends Storage {
         }
     }
 
+    @Override
+    public long fileLength(String name) throws IOException {
+        ensureOpen();
+        validateFileName(name);
+        Path filePath = rootPath.resolve(name);
+        if (!Files.exists(filePath)) {
+            throw new IOException("File does not exist: " + name);
+        }
+        return Files.size(filePath);
+    }
+
+    @Override
+    public boolean fileExists(String name) throws IOException {
+        ensureOpen();
+        validateFileName(name);
+        Path filePath = rootPath.resolve(name);
+        return Files.exists(filePath);
+    }
+
     /**
      * Opens a segment file for reading.
      * 
@@ -37,13 +57,30 @@ public class FileSystemStorage extends Storage {
     @Override
     public SegmentFile openFile(String name) throws IOException {
         ensureOpen();
+        validateFileName(name);
+
         Path filePath = rootPath.resolve(name);
-        
+        if (!Files.exists(filePath)) {
+            throw new IOException("File does not exist: " + name);
+        }
+
         // Open file in read-only mode since SegmentFile is now read-only
-        FileChannel channel = FileChannel.open(filePath, StandardOpenOption.READ);
-        
-        FeatherFileHeader header = FeatherFileHeader.readFrom(channel);
-        return createSegmentFile(channel, header.getFileType());
+        FileChannel channel = null;
+        try {
+            channel = FileChannel.open(filePath, StandardOpenOption.READ);
+            FeatherFileHeader header = FeatherFileHeader.readFrom(channel);
+            return createSegmentFile(channel, header.getFileType());
+        } catch (IOException e) {
+            if (channel != null) {
+                try {
+                    channel.close();
+                } catch (IOException closeException) {
+                    // To trace its error chain, use addSuppressed()
+                    e.addSuppressed(closeException);
+                }
+            }
+            throw e;
+        }
     }
 
     /**
@@ -56,6 +93,7 @@ public class FileSystemStorage extends Storage {
      */
     public SegmentFileWriter createFileWriter(String name, FileType type) throws IOException {
         ensureOpen();
+        validateFileName(name);
         Path filePath = rootPath.resolve(name + type.getExtension());
         
         return createSegmentFileWriter(filePath, type);
@@ -64,6 +102,7 @@ public class FileSystemStorage extends Storage {
     @Override
     public void deleteFile(String name) throws IOException {
         ensureOpen();
+        validateFileName(name);
         Files.deleteIfExists(rootPath.resolve(name));
     }
 
@@ -73,6 +112,60 @@ public class FileSystemStorage extends Storage {
         try (Stream<Path> paths = Files.list(rootPath)) {
             return paths.map(p -> p.getFileName().toString())
                     .toArray(String[]::new);
+        }
+    }
+
+    @Override
+    public void rename(String source, String dest) throws IOException {
+        ensureOpen();
+        validateFileName(source);
+        validateFileName(dest);
+
+        Path sourcePath = rootPath.resolve(source);
+        Path destPath = rootPath.resolve(dest);
+
+        if (source.equals(dest)) {
+            return;
+        }
+
+        // Check if the source file exists
+        if (!Files.exists(sourcePath)) {
+            throw new IOException("Source file does not exist: " + source);
+        }
+
+        // Check if the destination file exists, to prevent overwriting
+        if (Files.exists(destPath)) {
+            throw new IOException("Destination file already exists: " + dest);
+        }
+
+        // Atomically moves file
+        Files.move(sourcePath, destPath);
+    }
+
+    @Override
+    public void sync(Collection<String> names) throws IOException {
+        ensureOpen();
+        for (String name : names) {
+            validateFileName(name);
+            Path filePath = rootPath.resolve(name);
+
+            if (!Files.exists(filePath)) {
+                throw new IOException("File does not exist: " + name);
+            }
+
+            try (FileChannel channel = FileChannel.open(filePath,
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
+        }
+    }
+
+    @Override
+    public void syncMetaData() throws IOException {
+        ensureOpen();
+        try (FileChannel channel = FileChannel.open(rootPath)) {
+            channel.force(true);
         }
     }
 
@@ -97,6 +190,21 @@ public class FileSystemStorage extends Storage {
     @Override
     protected void closeInternal() throws IOException {
         // Reserved for future resource cleanup (caches, buffer pools, etc.)
+    }
+
+    /**
+     * Validates file name format.
+     * 
+     * @param name The file name to validate
+     * @throws IllegalArgumentException If the file name is invalid
+     */
+    private void validateFileName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("File name cannot be null or empty");
+        }
+        if (name.contains("..") || name.contains("/") || name.contains("\\")) {
+            throw new IllegalArgumentException("File name contains invalid characters");
+        }
     }
 
     /**
@@ -133,6 +241,7 @@ public class FileSystemStorage extends Storage {
      */
     public MetaFileWriter createMetaFileWriter(String name, SegmentMetadata metadata) throws IOException {
         ensureOpen();
+        validateFileName(name);
         Path filePath = rootPath.resolve(name + FileType.META.getExtension());
         return new MetaFileWriter(filePath, BUFFER_SIZE, metadata);
     }
@@ -151,4 +260,5 @@ public class FileSystemStorage extends Storage {
     public Path getRootPath() {
         return rootPath;
     }
+
 }

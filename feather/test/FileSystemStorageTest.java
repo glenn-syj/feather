@@ -1,5 +1,7 @@
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import storage.FileSystemStorage;
 import storage.file.*;
@@ -260,5 +262,327 @@ class FileSystemStorageTest {
         // Document count exceeds ID range
         assertThrows(IllegalArgumentException.class, 
             () -> storage.createMetaFileWriter(fileName + "4", new SegmentMetadata(3, 1, 2)));
+    }
+
+    @Test
+    void shouldCheckFileExists() throws IOException {
+        // Given
+        String fileName = "test";
+        String fullName = fileName + FileType.DOC.getExtension();
+        
+        // When - file doesn't exist
+        boolean existsBefore = storage.fileExists(fullName);
+        
+        // Then
+        assertFalse(existsBefore);
+        
+        // When - create file
+        SegmentFileWriter writer = storage.createFileWriter(fileName, FileType.DOC);
+        writer.complete();
+        
+        // When - file exists
+        boolean existsAfter = storage.fileExists(fullName);
+        
+        // Then
+        assertTrue(existsAfter);
+    }
+
+    @Test
+    void shouldThrowWhenCheckingFileExistsWithInvalidName() {
+        // Test null name
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists(null));
+        
+        // Test empty name
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists(""));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists("   "));
+        
+        // Test invalid characters
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists("../test.doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists("test/../doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileExists("test\\doc"));
+    }
+
+    @Test
+    void shouldGetFileLength() throws IOException {
+        // Given
+        String fileName = "test";
+        String fullName = fileName + FileType.DOC.getExtension();
+        
+        // When - create file
+        SegmentFileWriter writer = storage.createFileWriter(fileName, FileType.DOC);
+        SegmentFile file = writer.complete();
+        file.close();
+        
+        // When - get file length
+        long length = storage.fileLength(fullName);
+        
+        // Then
+        assertTrue(length > 0);
+        assertEquals(Files.size(tempDir.resolve(fullName)), length);
+    }
+
+    @Test
+    void shouldThrowWhenGettingLengthOfNonExistentFile() {
+        String fileName = "nonexistent.doc";
+        assertThrows(IOException.class, () -> storage.fileLength(fileName));
+    }
+
+    @Test
+    void shouldThrowWhenGettingFileLengthWithInvalidName() {
+        // Test null name
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength(null));
+        
+        // Test empty name
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength(""));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength("   "));
+        
+        // Test invalid characters
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength("../test.doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength("test/../doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.fileLength("test\\doc"));
+    }
+
+    @Test
+    void shouldThrowWhenClosedForFileLengthAndExists() throws IOException {
+        storage.close();
+        assertThrows(IllegalStateException.class, () -> storage.fileLength("test.doc"));
+        assertThrows(IllegalStateException.class, () -> storage.fileExists("test.doc"));
+    }
+
+    @Test
+    void shouldHandleFileLengthForDifferentFileTypes() throws IOException {
+        // Test DOC file
+        testFileLength("test1", FileType.DOC);
+        
+        // Test DIC file
+        testFileLength("test2", FileType.DIC);
+        
+        // Test POST file
+        testFileLength("test3", FileType.POST);
+        
+        // Test META file
+        SegmentMetadata metadata = new SegmentMetadata(5, 1, 5);
+        MetaFileWriter writer = storage.createMetaFileWriter("test4", metadata);
+        SegmentFile file = writer.complete();
+        file.close();
+        
+        long metaLength = storage.fileLength("test4.meta");
+        assertTrue(metaLength > 0);
+    }
+
+    private void testFileLength(String fileName, FileType type) throws IOException {
+        String fullName = fileName + type.getExtension();
+        
+        SegmentFileWriter writer = storage.createFileWriter(fileName, type);
+        SegmentFile file = writer.complete();
+        file.close();
+        
+        long length = storage.fileLength(fullName);
+        assertTrue(length > 0);
+        assertEquals(Files.size(tempDir.resolve(fullName)), length);
+    }
+
+    // ========== RENAME TESTS ==========
+
+    @Test
+    void shouldRenameFile() throws IOException {
+        // Given
+        String sourceName = "source.doc";
+        String destName = "dest.doc";
+        createTestFile("source", FileType.DOC);
+        
+        // When
+        storage.rename(sourceName, destName);
+        
+        // Then
+        assertFalse(storage.fileExists(sourceName));
+        assertTrue(storage.fileExists(destName));
+        assertEquals(storage.fileLength(destName), Files.size(tempDir.resolve(destName)));
+    }
+
+    @Test
+    void shouldRenameMultipleFileTypes() throws IOException {
+        // Test DOC file rename
+        testRenameFileType("doc_source", "doc_dest", FileType.DOC);
+        
+        // Test DIC file rename
+        testRenameFileType("dic_source", "dic_dest", FileType.DIC);
+        
+        // Test POST file rename
+        testRenameFileType("post_source", "post_dest", FileType.POST);
+        
+        // Test META file rename
+        SegmentMetadata metadata = new SegmentMetadata(5, 1, 5);
+        MetaFileWriter writer = storage.createMetaFileWriter("meta_source", metadata);
+        writer.complete();
+        
+        storage.rename("meta_source.meta", "meta_dest.meta");
+        assertFalse(storage.fileExists("meta_source.meta"));
+        assertTrue(storage.fileExists("meta_dest.meta"));
+    }
+
+    private void testRenameFileType(String sourceName, String destName, FileType type) throws IOException {
+        String sourceFile = sourceName + type.getExtension();
+        String destFile = destName + type.getExtension();
+        
+        createTestFile(sourceName, type);
+        storage.rename(sourceFile, destFile);
+        
+        assertFalse(storage.fileExists(sourceFile));
+        assertTrue(storage.fileExists(destFile));
+    }
+
+    @Test
+    void shouldThrowWhenRenamingNonExistentFile() {
+        String sourceName = "nonexistent.doc";
+        String destName = "new.doc";
+        
+        assertThrows(IOException.class, () -> storage.rename(sourceName, destName));
+    }
+
+    @Test
+    void shouldThrowWhenRenamingToExistingFile() throws IOException {
+        // Given
+        createTestFile("source", FileType.DOC);
+        createTestFile("dest", FileType.DOC);
+        
+        // When & Then
+        assertThrows(IOException.class, () -> storage.rename("source.doc", "dest.doc"));
+    }
+
+    @Test
+    void shouldThrowWhenRenamingWithInvalidNames() {
+        // Test null source name
+        assertThrows(IllegalArgumentException.class, () -> storage.rename(null, "dest.doc"));
+        
+        // Test empty source name
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("", "dest.doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("   ", "dest.doc"));
+        
+        // Test invalid characters in source name
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("../source.doc", "dest.doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("source/../doc", "dest.doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("source\\doc", "dest.doc"));
+        
+        // Test null dest name
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("source.doc", null));
+        
+        // Test empty dest name
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("source.doc", ""));
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("source.doc", "   "));
+        
+        // Test invalid characters in dest name
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("source.doc", "../dest.doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("source.doc", "dest/../doc"));
+        assertThrows(IllegalArgumentException.class, () -> storage.rename("source.doc", "dest\\doc"));
+    }
+
+    @Test
+    void shouldHandleRenameToSameName() throws IOException {
+        // Given
+        createTestFile("test", FileType.DOC);
+        String fileName = "test.doc";
+        
+        // When & Then - should not throw and file should still exist
+        assertDoesNotThrow(() -> storage.rename(fileName, fileName));
+        assertTrue(storage.fileExists(fileName));
+    }
+
+    @Test
+    void shouldThrowWhenClosedForRename() throws IOException {
+        storage.close();
+        assertThrows(IllegalStateException.class, () -> storage.rename("source.doc", "dest.doc"));
+    }
+
+    @Test
+    void shouldPreserveFileContentAfterRename() throws IOException {
+        // Given
+        String sourceName = "source.doc";
+        String destName = "dest.doc";
+        createTestFile("source", FileType.DOC);
+        
+        // Get original file size
+        long originalSize = storage.fileLength(sourceName);
+        
+        // When
+        storage.rename(sourceName, destName);
+        
+        // Then
+        assertEquals(originalSize, storage.fileLength(destName));
+        assertEquals(originalSize, Files.size(tempDir.resolve(destName)));
+    }
+
+    @Test
+    void shouldRenameFileAndUpdateListFiles() throws IOException {
+        // Given
+        createTestFile("file1", FileType.DOC);
+        createTestFile("file2", FileType.DOC);
+        String[] filesBefore = storage.listFiles();
+        
+        // When
+        storage.rename("file1.doc", "renamed_file1.doc");
+        
+        // Then
+        String[] filesAfter = storage.listFiles();
+        assertEquals(filesBefore.length, filesAfter.length);
+        
+        assertFalse(containsFile(filesAfter, "file1.doc"));
+        assertTrue(containsFile(filesAfter, "renamed_file1.doc"));
+        assertTrue(containsFile(filesAfter, "file2.doc"));
+    }
+
+    // ========== SYNC TESTS ==========
+
+    @Test
+    void shouldSyncFile() throws IOException {
+        // Given
+        String fileName = "test.doc";
+        createTestFile("test", FileType.DOC);
+        java.util.List<String> filesToSync = java.util.Collections.singletonList(fileName);
+
+        // When & Then
+        assertDoesNotThrow(() -> storage.sync(filesToSync));
+    }
+
+    @Test
+    void shouldSyncMultipleFiles() throws IOException {
+        // Given
+        createTestFile("file1", FileType.DOC);
+        createTestFile("file2", FileType.DIC);
+        java.util.List<String> filesToSync = java.util.Arrays.asList("file1.doc", "file2.dic");
+
+        // When & Then
+        assertDoesNotThrow(() -> storage.sync(filesToSync));
+    }
+
+    @Test
+    void shouldThrowWhenSyncingNonExistentFile() {
+        java.util.List<String> filesToSync = java.util.Collections.singletonList("nonexistent.doc");
+        assertThrows(IOException.class, () -> storage.sync(filesToSync));
+    }
+
+    @Test
+    void shouldThrowWhenSyncingWithInvalidName() {
+        java.util.List<String> invalidFiles = java.util.Collections.singletonList("../invalid.doc");
+        assertThrows(IllegalArgumentException.class, () -> storage.sync(invalidFiles));
+    }
+
+    @Test
+    void shouldThrowWhenClosedForSync() throws IOException {
+        storage.close();
+        java.util.List<String> filesToSync = java.util.Collections.singletonList("test.doc");
+        assertThrows(IllegalStateException.class, () -> storage.sync(filesToSync));
+    }
+
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void shouldSyncMetadata() {
+        assertDoesNotThrow(() -> storage.syncMetaData());
+    }
+
+    @Test
+    void shouldThrowWhenClosedForSyncMetadata() throws IOException {
+        storage.close();
+        assertThrows(IllegalStateException.class, () -> storage.syncMetaData());
     }
 }

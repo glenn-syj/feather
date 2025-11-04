@@ -1,7 +1,7 @@
 package core.analysis;
 
-import java.util.List;
+import java.util.stream.Stream;
 
 public interface FeatherAnalyzer {
-    List<FeatherToken> analyze(String text);
+    Stream<FeatherToken> analyze(String text);
 }

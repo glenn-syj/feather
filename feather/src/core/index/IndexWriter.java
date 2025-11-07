@@ -33,6 +33,11 @@ public class IndexWriter {
     private void flush() throws IOException {
         System.out.println("Flushing " + documentBuffer.size() + " documents.");
 
+        if (documentBuffer.isEmpty()) {
+            System.out.println("Document Buffer is empty, nothing to flush.");
+            return;
+        }
+
         FeatherAnalyzer analyzer = config.getAnalyzer();
         if (analyzer == null) {
             throw new IllegalStateException("FeatherAnalyzer is not configured in IndexWriterConfig.");

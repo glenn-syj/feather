@@ -2,6 +2,9 @@ package storage;
 
 import storage.file.FileType;
 import storage.file.SegmentFile;
+import storage.file.SegmentMetadata;
+import storage.writer.MetaFileWriter;
+import storage.writer.SegmentFileWriter;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -20,6 +23,8 @@ public abstract class Storage implements Closeable {
     public abstract long fileLength(String name) throws IOException;
     public abstract boolean fileExists(String name) throws IOException;
     public abstract SegmentFile createFile(String name, FileType type) throws IOException;
+    public abstract SegmentFileWriter createFileWriter(String name, FileType type) throws IOException;
+    public abstract MetaFileWriter createMetaFileWriter(String name, SegmentMetadata metadata) throws IOException;
     public abstract SegmentFile openFile(String name) throws IOException;
     public abstract void deleteFile(String name) throws IOException;
     public abstract String[] listFiles() throws IOException;

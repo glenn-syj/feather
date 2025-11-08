@@ -10,7 +10,7 @@ import java.util.HashMap; // Added import
 import java.util.List;
 import java.util.Map;
 
-public class IndexWriter {
+public class IndexWriter implements Closeable {
 
     private final Storage storage;
     private final IndexWriterConfig config;
@@ -91,6 +91,7 @@ public class IndexWriter {
         // TODO: Persist segment metadata (segments_N file).
     }
 
+    @Override
     public void close() throws IOException {
         try {
             commit();

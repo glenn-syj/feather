@@ -4,6 +4,15 @@ import storage.Storage;
 import storage.file.Document;
 import core.analysis.FeatherAnalyzer;
 import core.analysis.FeatherToken;
+import storage.SegmentInfo;
+import storage.Storage;
+import storage.file.*;
+import storage.writer.DictionaryFileWriter;
+import storage.writer.DocumentFileWriter;
+import storage.writer.MetaFileWriter;
+import storage.writer.PostingFileWriter;
+
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap; // Added import
@@ -15,12 +24,36 @@ public class IndexWriter implements Closeable {
     private final Storage storage;
     private final IndexWriterConfig config;
     private final List<Document> documentBuffer;
-    private int segmentCounter = 0; // Added segment counter
+    private final List<SegmentInfo> segments; // This will now be managed by segmentsManager
+    private final Segments segmentsManager;
+    private int segmentCounter;
 
-    public IndexWriter(Storage storage, IndexWriterConfig config) {
+    public IndexWriter(Storage storage, IndexWriterConfig config) throws IOException {
         this.storage = storage;
         this.config = config;
         this.documentBuffer = new ArrayList<>();
+        
+        // Load existing segments from the last commit point in storage.
+        this.segmentsManager = Segments.readLatest(storage);
+        this.segments = this.segmentsManager.getSegments(); // Initialize the list from the loaded segments
+
+        // Initialize segmentCounter based on existing segments to avoid name collisions
+        // Find the highest segment number from existing segments and increment it.
+        int maxSegmentNum = -1;
+        for (SegmentInfo si : segments) {
+            String name = si.getName();
+            if (name.startsWith("segment_")) {
+                try {
+                    int num = Integer.parseInt(name.substring("segment_".length()));
+                    if (num > maxSegmentNum) {
+                        maxSegmentNum = num;
+                    }
+                } catch (NumberFormatException e) {
+                    // Ignore segments with non-numeric suffixes
+                }
+            }
+        }
+        this.segmentCounter = maxSegmentNum + 1;
     }
 
     public void addDocument(Document doc) throws IOException {

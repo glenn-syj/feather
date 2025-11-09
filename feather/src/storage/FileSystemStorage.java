@@ -91,6 +91,7 @@ public class FileSystemStorage extends Storage {
      * @return A SegmentFileWriter instance for writing to the file
      * @throws IOException If an I/O error occurs
      */
+    @Override
     public SegmentFileWriter createFileWriter(String name, FileType type) throws IOException {
         ensureOpen();
         validateFileName(name);
@@ -239,6 +240,7 @@ public class FileSystemStorage extends Storage {
     /**
      * Creates a MetaFileWriter with the provided metadata.
      */
+    @Override
     public MetaFileWriter createMetaFileWriter(String name, SegmentMetadata metadata) throws IOException {
         ensureOpen();
         validateFileName(name);

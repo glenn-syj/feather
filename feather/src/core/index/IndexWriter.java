@@ -70,68 +70,11 @@ public class IndexWriter implements Closeable {
             return;
         }
 
-        FeatherAnalyzer analyzer = config.getAnalyzer();
-        if (analyzer == null) {
-            throw new IllegalStateException("FeatherAnalyzer is not configured in IndexWriterConfig.");
-        }
-
         String segmentName = "segment_" + (segmentCounter++);
         System.out.println("Generated segment name: " + segmentName);
 
-        // Map: term -> documentId -> list of positions
-        Map<String, Map<Integer, List<Integer>>> postingLists = new HashMap<>();
-
-        int docCount = documentBuffer.size();
-        int minDocId = Integer.MAX_VALUE;
-        int maxDocId = Integer.MIN_VALUE;
-
-        // Process documents one by one, and their token streams directly
-        for (Document doc : documentBuffer) {
-            int docId = doc.getId();
-
-            minDocId = Math.min(minDocId, docId);
-            maxDocId = Math.max(maxDocId, docId);
-
-            Map<String, Object> fields = doc.getFields();
-
-            for (Map.Entry<String, Object> entry : fields.entrySet()) {
-                String fieldName = entry.getKey();
-                Object fieldValue = entry.getValue();
-
-                if (fieldValue instanceof String) {
-                    // TODO: Differentiate between TEXT (analyzed) and KEYWORD (non-analyzed) fields.
-                    // This will be driven by a schema/mapping system in the future.
-                    // For now, all string fields are treated as TEXT, intentionally.
-                    boolean isAnalyzed = true;
-
-                    if (isAnalyzed) {
-                        // TEXT field: Analyzed for full-text search.
-                        try (Stream<FeatherToken> tokenStream = analyzer.analyze((String) fieldValue)) {
-                            tokenStream.forEach(token -> {
-                                String term = token.term();
-                                String fullTerm = fieldName + ":" + term;
-
-                                postingLists
-                                    .computeIfAbsent(fullTerm, k -> new HashMap<>())
-                                    .computeIfAbsent(docId, k -> new ArrayList<>())
-                                    .add(token.startOffset()); // Using startOffset as position.
-                            });
-                        }
-                    } else {
-                        // KEYWORD field: Not analyzed, treated as a single term for exact matches.
-                        String term = (String) fieldValue;
-                        String fullTerm = fieldName + ":" + term;
-                        postingLists
-                            .computeIfAbsent(fullTerm, k -> new HashMap<>())
-                            .computeIfAbsent(docId, k -> new ArrayList<>())
-                            .add(0); // For non-analyzed fields, position can be 0.
-                    }
-                }
-                // TODO: Handle other field types (Numeric, Binary) if they need analysis or special processing
-            }
-        }
-
-        System.out.println("Built in-memory posting lists for " + postingLists.size() + " unique terms.");
+        InMemoryIndex inMemoryIndex = buildInMemoryIndex();
+        System.out.println("Built in-memory posting lists for " + inMemoryIndex.postingLists.size() + " unique terms.");
 
         DocumentFileWriter docWriter = null;
         PostingFileWriter postWriter = null;
@@ -143,75 +86,29 @@ public class IndexWriter implements Closeable {
             postWriter = (PostingFileWriter) storage.createFileWriter(segmentName, FileType.POST);
             dicWriter = (DictionaryFileWriter) storage.createFileWriter(segmentName, FileType.DIC);
 
-            // Writes documents.
-            for (Document doc : documentBuffer) {
-                docWriter.writeDocument(doc);
-            }
-            System.out.println("Wrote " + docCount + " documents to " + segmentName + FileType.DOC.getExtension());
+            SegmentWriters writers = new SegmentWriters(docWriter, postWriter, dicWriter);
+            writeSegmentData(segmentName, writers, inMemoryIndex);
 
-            // Writes postings and prepares dictionary.
-            List<Term> terms = new ArrayList<>();
-            for (Map.Entry<String, Map<Integer, List<Integer>>> entry : postingLists.entrySet()) {
-                String fullTerm = entry.getKey();
-                Map<Integer, List<Integer>> postingsData = entry.getValue();
-
-                List<Posting> postings = new ArrayList<>();
-                for (Map.Entry<Integer, List<Integer>> postingEntry : postingsData.entrySet()) {
-                    int docId = postingEntry.getKey();
-                    int[] positions = postingEntry.getValue().stream().mapToInt(i -> i).toArray();
-                    postings.add(new Posting(docId, positions.length, positions));
-                }
-
-                long postingPosition = postWriter.writePostingList(postings);
-
-                int separatorIndex = fullTerm.indexOf(":");
-                String fieldName = fullTerm.substring(0, separatorIndex);
-                String termText = fullTerm.substring(separatorIndex + 1);
-
-                terms.add(new Term(fieldName, termText, postings.size(), postingPosition));
-            }
-            System.out.println("Wrote " + terms.size() + " posting lists to " + segmentName + FileType.POST.getExtension());
-
-            // Write dictionary.
-            for (Term term : terms) {
-                dicWriter.addTermRecord(term);
-            }
-            System.out.println("Added " + terms.size() + " terms to dictionary writer for " + segmentName);
-
-
-            // Finalize segment files with complete()
             DocumentFile docFile = docWriter.complete();
             PostingFile postFile = postWriter.complete();
             DictionaryFile dicFile = dicWriter.complete();
             System.out.println("Finalized .doc, .post, and .dic files for " + segmentName);
 
-            // Writing Metadata after finalizing segment files
-            SegmentMetadata metadata = new SegmentMetadata(docCount, minDocId, maxDocId);
+            SegmentFiles files = new SegmentFiles(docFile, postFile, dicFile);
+
+            SegmentMetadata metadata = new SegmentMetadata(inMemoryIndex.docCount, inMemoryIndex.minDocId, inMemoryIndex.maxDocId);
             metaWriter = storage.createMetaFileWriter(segmentName, metadata);
             MetaFile metaFile = metaWriter.complete();
             System.out.println("Wrote metadata to " + segmentName + FileType.META.getExtension());
 
-            // Create an in-memory representation of the new segment and add it to the writer's state.
-            SegmentInfo newSegment = new SegmentInfo(segmentName, System.currentTimeMillis(), docCount, minDocId, maxDocId);
-            
-            // Calculate and set the size in bytes for the new segment.
-            // NOTE: This one is for further MERGE related feature.
-            long segmentSize = docFile.size() + postFile.size() + dicFile.size() + metaFile.size();
-            newSegment.setSizeInBytes(segmentSize);
-
-            segmentsManager.addSegment(newSegment); // Use segmentsManager
-            System.out.println("Created and registered new segment in-memory: " + newSegment);
+            registerNewSegment(segmentName, inMemoryIndex, files, metaFile);
 
         } catch (IOException e) {
-            // Clean up any partially written files for this segment
             cleanupFailedSegment(segmentName);
-
-            // Re-throw the original exception to the caller
             throw new IOException("Failed to flush segment " + segmentName, e);
         } finally {
             documentBuffer.clear();
             System.out.println("Document buffer cleared.");
-            // The complete() method on writers should close them, but as a safeguard.
             try {
                 if (docWriter != null) docWriter.close();
                 if (postWriter != null) postWriter.close();
@@ -221,6 +118,98 @@ public class IndexWriter implements Closeable {
                 System.err.println("Error closing file writers: " + ex.getMessage());
             }
         }
+    }
+
+    private InMemoryIndex buildInMemoryIndex() {
+        FeatherAnalyzer analyzer = config.getAnalyzer();
+        if (analyzer == null) {
+            throw new IllegalStateException("FeatherAnalyzer is not configured in IndexWriterConfig.");
+        }
+
+        Map<String, Map<Integer, List<Integer>>> postingLists = new HashMap<>();
+        int minDocId = Integer.MAX_VALUE;
+        int maxDocId = Integer.MIN_VALUE;
+
+        for (Document doc : documentBuffer) {
+            int docId = doc.getId();
+            minDocId = Math.min(minDocId, docId);
+            maxDocId = Math.max(maxDocId, docId);
+
+            Map<String, Object> fields = doc.getFields();
+            for (Map.Entry<String, Object> entry : fields.entrySet()) {
+                String fieldName = entry.getKey();
+                Object fieldValue = entry.getValue();
+
+                if (fieldValue instanceof String) {
+                    boolean isAnalyzed = true; // For now, all string fields are treated as TEXT.
+                    if (isAnalyzed) {
+                        try (Stream<FeatherToken> tokenStream = analyzer.analyze((String) fieldValue)) {
+                            tokenStream.forEach(token -> {
+                                String term = token.term();
+                                String fullTerm = fieldName + ":" + term;
+                                postingLists
+                                        .computeIfAbsent(fullTerm, k -> new HashMap<>())
+                                        .computeIfAbsent(docId, k -> new ArrayList<>())
+                                        .add(token.startOffset());
+                            });
+                        }
+                    } else {
+                        String term = (String) fieldValue;
+                        String fullTerm = fieldName + ":" + term;
+                        postingLists
+                                .computeIfAbsent(fullTerm, k -> new HashMap<>())
+                                .computeIfAbsent(docId, k -> new ArrayList<>())
+                                .add(0);
+                    }
+                }
+            }
+        }
+        return new InMemoryIndex(postingLists, documentBuffer.size(), minDocId, maxDocId);
+    }
+
+    private void writeSegmentData(String segmentName, SegmentWriters writers, InMemoryIndex inMemoryIndex) throws IOException {
+        // Writes documents.
+        for (Document doc : documentBuffer) {
+            writers.docWriter.writeDocument(doc);
+        }
+        System.out.println("Wrote " + inMemoryIndex.docCount + " documents to " + segmentName + FileType.DOC.getExtension());
+
+        // Writes postings and prepares dictionary.
+        List<Term> terms = new ArrayList<>();
+        for (Map.Entry<String, Map<Integer, List<Integer>>> entry : inMemoryIndex.postingLists.entrySet()) {
+            String fullTerm = entry.getKey();
+            Map<Integer, List<Integer>> postingsData = entry.getValue();
+
+            List<Posting> postings = new ArrayList<>();
+            for (Map.Entry<Integer, List<Integer>> postingEntry : postingsData.entrySet()) {
+                int docId = postingEntry.getKey();
+                int[] positions = postingEntry.getValue().stream().mapToInt(i -> i).toArray();
+                postings.add(new Posting(docId, positions.length, positions));
+            }
+
+            long postingPosition = writers.postWriter.writePostingList(postings);
+
+            int separatorIndex = fullTerm.indexOf(":");
+            String fieldName = fullTerm.substring(0, separatorIndex);
+            String termText = fullTerm.substring(separatorIndex + 1);
+
+            terms.add(new Term(fieldName, termText, postings.size(), postingPosition));
+        }
+        System.out.println("Wrote " + terms.size() + " posting lists to " + segmentName + FileType.POST.getExtension());
+
+        // Write dictionary.
+        for (Term term : terms) {
+            writers.dicWriter.addTermRecord(term);
+        }
+        System.out.println("Added " + terms.size() + " terms to dictionary writer for " + segmentName);
+    }
+
+    private void registerNewSegment(String segmentName, InMemoryIndex inMemoryIndex, SegmentFiles files, MetaFile metaFile) throws IOException {
+        SegmentInfo newSegment = new SegmentInfo(segmentName, System.currentTimeMillis(), inMemoryIndex.docCount, inMemoryIndex.minDocId, inMemoryIndex.maxDocId);
+        long segmentSize = files.docFile.size() + files.postFile.size() + files.dicFile.size() + metaFile.size();
+        newSegment.setSizeInBytes(segmentSize);
+        segmentsManager.addSegment(newSegment);
+        System.out.println("Created and registered new segment in-memory: " + newSegment);
     }
 
     private void cleanupFailedSegment(String segmentName) {
@@ -249,5 +238,16 @@ public class IndexWriter implements Closeable {
         } finally {
             storage.close();
         }
+    }
+
+    private record InMemoryIndex(Map<String, Map<Integer, List<Integer>>> postingLists, int docCount, int minDocId,
+                                 int maxDocId) {
+    }
+
+    private record SegmentWriters(DocumentFileWriter docWriter, PostingFileWriter postWriter,
+                                  DictionaryFileWriter dicWriter) {
+    }
+
+    private record SegmentFiles(DocumentFile docFile, PostingFile postFile, DictionaryFile dicFile) {
     }
 }
